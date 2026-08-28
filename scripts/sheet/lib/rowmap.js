@@ -120,3 +120,36 @@ export const firstBlankRow = async (
   }
   return { row: null, stopped: true, stopBefore };
 };
+
+/**
+ * Find an existing Approvals row for a record, by identity.
+ *
+ * Two reasons this is needed, both found the hard way:
+ *
+ *  - **Idempotency.** Without it, a rerun appends the same conference a second
+ *    time — `firstBlankRow` happily returns the next empty row and the script
+ *    has no idea the record is already recorded.
+ *  - **Verification.** Re-checking a completed write has to look at the row
+ *    that WAS written, not at wherever the next append would go.
+ *
+ * @returns {Promise<number|null>} the row, or null when not present.
+ */
+export const findApprovalRow = async (
+  target,
+  key,
+  tab,
+  { email, conf },
+  from,
+  stopBefore,
+) => {
+  const wantEmail = email.trim().toLowerCase();
+  const wantConf = conf.trim().toLowerCase();
+  for (let row = from; row < stopBefore; row++) {
+    const text = await gvizCsv(target, key, tab, `A${row}:B${row}`);
+    const cells = parseCsv(text)[0] ?? [];
+    const gotEmail = unquote(cells[0]).toLowerCase();
+    const gotConf = unquote(cells[1]).toLowerCase();
+    if (gotEmail === wantEmail && gotConf === wantConf) return row;
+  }
+  return null;
+};

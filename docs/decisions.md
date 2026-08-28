@@ -23,6 +23,47 @@ re-doing. Those are the entries that actually improve the skill.
 
 ## Entries
 
+### 2026-08-28 — money columns carry a currency format; type bare numbers
+
+**Situation:** Q2 has been open since the layout was mapped — the money columns
+render `€200`, `€70.00`, `€1,020`, and gviz returns the formatted value either
+way, so it was impossible to tell whether the cells hold numbers with a currency
+format or literal text.
+**Settled by the first real write:** a typed `70` reads back as `€70`. The
+columns carry the format.
+**Rule:** type bare numbers into `Travel` / `Accomodations` / `Total`. Never type
+a currency symbol. Verification must strip `€ £ $ ,` before comparing
+numerically — the first run reported three false FAILs by comparing a typed
+value against a formatted one, which is the verifier crying wolf on a write that
+was actually correct.
+**Status:** graduated.
+
+### 2026-08-28 — the Approvals write must be idempotent
+
+**Situation:** `--verify` recomputed `firstBlankRow` and checked row 15 — the
+next append target — rather than row 14, which had just been written. That
+exposed the real gap: the write path had no notion of "already recorded", so a
+**rerun would have appended the same conference a second time**.
+**Rule:** `findApprovalRow()` looks the record up by (email, conf) in the
+`Approved` section first. Found → skip the append, report `ALREADY RECORDED`,
+and verify against that row. Not found → append at the first blank.
+**Status:** graduated. Not caught by the incident review — found only because a
+verify-only rerun pointed at the wrong row.
+
+### 2026-08-28 — preconditions flag and stop, and it worked immediately
+
+**Situation:** Ryan: if the CDP session is not logged in or otherwise not ready,
+flag it rather than fixing it. On the very first guarded `--apply`, the
+precondition refused: the tab was still on a scratch workbook left over from the
+guard test.
+**Significance:** that is precisely the situation that caused the incident — a
+correct address against the wrong workbook. Before the guards it would have
+typed. It stopped and named the problem.
+**Rule:** browser preconditions (signed out, wrong workbook, editor not loaded)
+report what is wrong and what to do, and never self-heal. Also: clean up scratch
+tabs, not just scratch files — trashing the file left the tab pointing at it.
+**Status:** graduated.
+
 ### 2026-08-28 — INCIDENT: wrote into the wrong worksheet, corrupting live data
 
 **What happened:** `sheet:write --apply` for DevFest Campobasso typed its
