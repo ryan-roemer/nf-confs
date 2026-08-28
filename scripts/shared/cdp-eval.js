@@ -25,7 +25,7 @@ export const pickTarget = async (hostRe) => {
     signal: AbortSignal.timeout(5000),
   });
   const targets = await res.json();
-  const target = targets.find((t) => {
+  const pages = targets.filter((t) => {
     if (t.type !== "page") return false;
     try {
       return hostRe.test(new URL(t.url).hostname);
@@ -33,6 +33,11 @@ export const pickTarget = async (hostRe) => {
       return false;
     }
   });
+  // Prefer a tab already on a spreadsheet. The write path navigates the tab it
+  // picks, and grabbing an unrelated Google tab would navigate one Ryan is
+  // using out from under him.
+  const target =
+    pages.find((t) => t.url.includes("/spreadsheets/d/")) ?? pages[0];
   if (!target) {
     throw new Error(
       `No open page matching ${hostRe} in the conference Chrome.\n` +

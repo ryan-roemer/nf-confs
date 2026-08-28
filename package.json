@@ -13,6 +13,7 @@
     "sheet:probe": "node scripts/sheet/probe.js",
     "sheet:pending": "node scripts/sheet/pending.js",
     "notion:match": "node scripts/notion/match.js",
+    "sheet:write": "node scripts/sheet/write.js",
     "lint": "eslint . --fix",
     "pretty": "prettier . --write",
     "format": "npm run lint && npm run pretty"

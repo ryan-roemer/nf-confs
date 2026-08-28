@@ -25,25 +25,36 @@ to a person in Notion.
 
 ```
 scripts/
-  chrome.js            CLI: launch / status / login the Chrome       [BUILT]
+  chrome.js              CLI: launch / status / login the Chrome      [BUILT]
   shared/
-    cdp.js             connect, diagnostics, window heal, guards     [BUILT]
+    cdp.js               Playwright connect, diagnostics, guards      [BUILT]
+    cdp-eval.js          raw-CDP one-shot eval + gviz fetch           [BUILT]
+    cdp-session.js       persistent CDP session with keyboard input   [BUILT]
   sheet/
-    probe.js           exact per-tab gviz read -> .data/sheet/*.csv  [BUILT]
-    pending.js         Stage 1 triage + ask summary                  [BUILT]
-    lib/rows.js        CSV parse, date/cost/checkbox semantics        [BUILT]
-    write.js           append Approvals row, tick Speaking           [TODO]
+    probe.js             exact per-tab gviz read -> .data/sheet/      [BUILT]
+    pending.js           Stage 1 triage + ask summary                 [BUILT]
+    write.js             Approvals row + Speaking tick, dry-run first [BUILT]
+    lib/rows.js          CSV parse, date/cost/checkbox semantics      [BUILT]
+    lib/records.js       canonical records, triage, mirror check      [BUILT]
+    lib/rowmap.js        resolve TRUE sheet rows; find append target  [BUILT]
   notion/
-    snapshot.js        dump the Events Calendar to .data/notion/     [TODO]
-    match.js           sheet record <-> existing page, by URL        [TODO]
+    match.js             update-vs-create plan + coverage             [BUILT]
+    lib/match.js         URL/name/date scoring, refuses to guess      [BUILT]
+    lib/match.test.js    the refuse-to-guess paths                    [BUILT]
 config/
-  targets.json         sheet key, Notion database + data source      [BUILT]
-.data/                 gitignored: emails, costs, leave              [BUILT]
+  targets.json           sheet key, Notion database + data source     [BUILT]
+.data/                   gitignored: emails, costs, leave             [BUILT]
 docs/
-  workflow.md          the authority on field mappings               [BUILT]
-  schema.md            what both systems actually contain            [BUILT]
-  plan.md              this file
+  workflow.md            the authority on field mappings              [BUILT]
+  schema.md              what both systems actually contain           [BUILT]
+  decisions.md           judgment calls, and what graduated to code   [BUILT]
+  test-run.md            protocol for testing from a cold session     [BUILT]
+  plan.md                this file
 ```
+
+There is no `notion/snapshot.js` and there will not be one: only a Claude
+session can reach Notion, so the skill fetches candidate pages itself and writes
+`.data/notion/candidates.json` for the matcher to read.
 
 Stages are separate files on purpose. Reading the sheet, deciding what's new,
 and writing to Notion have very different risk profiles, and the middle one is
@@ -106,8 +117,16 @@ Why this is acceptable rather than merely expedient:
 - **Every write is verifiable.** `gviz` reads the same cells straight back, so
   the pipeline can confirm what landed instead of assuming. Any write step that
   cannot read back its own result should fail.
-- **Nothing is overwritten blind.** The Approvals write appends to the first
-  empty row; the checkbox write targets one known cell.
+- **Nothing is overwritten blind.** The checkbox write targets one resolved
+  cell. The Approvals write appends to the first blank row of the **`Approved`
+  section** — not "the first empty row", which would file the entry under the
+  `In consideration` label further down. The tab is sectioned: 1 headers,
+  2 totals, 3 blank, 4 the `Approved` label, 5–13 data, 14–25 blank, 26
+  `In consideration`. The write stops at 26 and asks rather than moving the
+  label.
+- **Row numbers are resolved, never derived.** gviz collapses blank rows, so a
+  record's position in a CSV read is not its row in the sheet — the live queue
+  is off by 3. See `sheet/lib/rowmap.js`.
 
 Caveat found in the same spike: the read-back showed the `Date` and `Total`
 _headers_ as empty, because gviz types a column from its data and drops a text
@@ -116,48 +135,32 @@ by reading the **cells**, not the header row.
 
 ## Open questions
 
-Answered so far, and by what: see [decisions.md](decisions.md). What remains,
-in the order it blocks work.
+Answered so far, and by what: see [decisions.md](decisions.md). What remains:
 
-**Q1. Where does an approved row go in `2026 Approvals`?** The tab is
-sectioned — totals at row 2, the label `Approved` at row 3, data at 4–12, the
-label `In consideration` at row 13. So "append to the first empty row" would
-file an approved entry under the wrong heading. Options:
-
-- Write into the last row of the `Approved` section, if there is a spare.
-- **Insert** a row at the section boundary — which the Name Box write path
-  cannot do; that needs a right-click row insert, or a different write path.
-- Something else you already do by hand that isn't visible in the data.
-
-This is the one blocking question for the sheet write script.
+**Q1. Does the script compute `Total`?** It is hand-entered today and already
+inconsistent with travel + accommodation on 2 of 9 rows. `write.js` currently
+computes it. Computing it quietly corrects history; preserving hand entry keeps
+the sheet as the human record.
 
 **Q2. Currency in the Approvals money columns.** Existing cells render `€200`,
-`€70.00`, `€1,020` — inconsistent decimals in one column. gviz returns the
-_formatted_ value, so it cannot tell us whether the cell holds a number with a
-currency format or literal text. If it's formatting, the script types `150` and
-the sheet does the rest; if it's text, the script types `€150`. One check in the
-UI settles it.
+`€70.00`, `€1,020`. gviz returns the formatted value, so it cannot tell us
+whether the cell holds a number with a currency format or literal text. The
+write path types a bare number, which is right if the column carries a currency
+format. The first real write will settle it — check how row 14 renders.
 
-**Q3. Does the script compute `Total`?** It is hand-entered today and already
-inconsistent with travel + accommodation on 2 of 9 rows. Computing it would be
-deterministic and would quietly correct history; preserving hand entry keeps the
-sheet as the human record.
-
-**Q4. Which wins when the conference page and the prior-year Notion page
+**Q3. Which wins when the conference page and the prior-year Notion page
 disagree?** The first test run hit this on `Location`, `Audience` and
-`Affliation` for **both** events it dry-ran. `workflow.md` says the conference
+`Affliation` for both events it dry-ran. `workflow.md` says the conference
 `Link` is the source of truth, but the prior-year page carries house style for
-exactly these fields. A standing rule would remove three escalations per event.
+exactly these fields. A standing rule removes three escalations per event.
 
-**Q5. Should "already correct, nothing to do" be its own outcome?** Row 49 is an
-`update` to a page that already looks right. Two rows are in that state today
-and more will accumulate. A no-op write is noise; an explicit outcome is
-information.
+**Q4. Should "already correct, nothing to do" be its own outcome?** Row 49 is an
+`update` to a page that already looks right. Two rows are in that state today.
 
-**Q6. Row 110 asks for travel with no estimate.** Block the entry, or write the
+**Q5. Row 110 (Ticino) asks for travel with no estimate.** Block, or write the
 Approvals row with travel blank?
 
-**Q7. `2026 Approvals` leads with `Email`, `2025 Approvals` with `Name`.** Which
+**Q6. `2026 Approvals` leads with `Email`, `2025 Approvals` with `Name`.** Which
 is the going-forward shape?
 
 ## Phases

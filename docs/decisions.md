@@ -23,6 +23,38 @@ re-doing. Those are the entries that actually improve the skill.
 
 ## Entries
 
+### 2026-08-28 — three tune-ups from the first test run
+
+**Situation:** the cold-session test surfaced three inconsistencies in the
+instructions themselves, not in the data.
+**Decision / fixes:**
+
+1. `docs/plan.md` was stale — it listed `notion/match.js` as `[TODO]` when it was
+   built and tested, and described the Approvals write as "appends to the first
+   empty row", which is wrong for the sectioned tab. Tree rewritten against
+   reality; the write path now states the section layout and the row-26 stop.
+2. **The skill contradicted `workflow.md` on `Tags`.** Step 3 told the reader to
+   copy `Tags` from the prior year; step 5 and `workflow.md` both say never touch
+   it. The test session followed `workflow.md` and left it unset — the right
+   call, but it should not have had to choose. Step 3 now excludes `Tags`
+   explicitly.
+3. `isDataRow` failing silently on the Approvals tabs — **already fixed** earlier
+   the same day; `readTab` now throws and takes a per-tab predicate.
+
+**Rule:** when two instruction files disagree, that is a bug in the instructions,
+not a judgment call for the reader. `workflow.md` is the authority on field
+mappings; the skill must not restate a mapping in a way that can drift from it.
+**Status:** graduated.
+
+### 2026-08-28 — never navigate a tab Ryan might be using
+
+**Situation:** `pickTarget` returned the first `google.com` page target, which
+could be an `accounts.google.com` tab. `write.js` then navigates whatever tab it
+picked to the workbook.
+**Decision:** prefer a tab already on a spreadsheet.
+**Rule:** both CDP modules pick a `/spreadsheets/d/` tab when one exists.
+**Status:** graduated.
+
 ### 2026-08-28 — gviz collapses blank rows, so CSV position is not a sheet row
 
 **Situation:** the write plan addressed cells by row number derived from CSV

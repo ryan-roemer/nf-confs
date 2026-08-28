@@ -85,8 +85,9 @@ Verdicts, and what each means:
 - **`update`** — one page is the same instance. Update it in place.
 - **`create`** — make a new page. When `priorYears` is non-empty, the series
   exists in other years: **copy from the most recent prior year** for `Audience`,
-  `Tags`, `Location` style and `Region`, then override with this year's facts.
-  This is why the matcher prints prior years.
+  `Location` style and `Region`, then override with this year's facts. This is
+  why the matcher prints prior years. **Not `Tags`** — this workflow never sets
+  `Tags`, even when the prior year has them (see step 5).
 - **`ambiguous`** — ⛔ ask Ryan. Never pick.
 - **`needs-review`** — ⛔ ask Ryan.
 
@@ -136,17 +137,25 @@ disagrees with the sheet.
 
 Only for entries Ryan accepted, and only after Notion succeeded.
 
-1. `2026 Approvals`: append `Email` · `Conf` · `Date` · `Travel` ·
-   `Accomodations` · `Total` · `Leave Days`. **Never write `Actuals`.**
-   Skip this entirely for `without requesting support` entries — nothing to
-   approve.
-2. `Speaking Events`: tick `Speaking`. It may already be ticked; that's fine,
-   it's idempotent. **Leave `Email/Slack Sent` alone — that is Ryan's step.**
+```bash
+npm run sheet:write -- --event "<name>"           # dry run, always first
+npm run sheet:write -- --event "<name>" --apply   # write
+```
 
-Writes go through the Name Box (`#t-name-box`); see the write path in
-[docs/plan.md](../../../docs/plan.md). **Read every write back with gviz and
-confirm the cells.** A write that cannot be verified is a failure, not a
-success.
+Show Ryan the dry run and get an explicit go-ahead before `--apply`.
+
+The script enforces the rules; do not work around it:
+
+- **Rows are resolved, never derived.** gviz collapses blank rows, so a record's
+  CSV position is not its sheet row — the live queue is off by 3. A derived row
+  number ticks `Speaking` on someone else's entry and reads back as success.
+- `G` (`Actuals`) and `M` (`Email/Slack Sent`) are **never** written. `M` is the
+  marker that takes the record out of the queue, and it is Ryan's.
+- Appends stop at the `In consideration` label (row 26). If the section fills,
+  **ask Ryan to move the label** — never move it yourself.
+- Every write is read back and compared cell by cell. A write that cannot be
+  verified is a failure, not a success. Report it as one.
+- `without requesting support` entries skip the Approvals write entirely.
 
 ## Capturing decisions
 
