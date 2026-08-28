@@ -23,6 +23,55 @@ re-doing. Those are the entries that actually improve the skill.
 
 ## Entries
 
+### 2026-08-28 — gviz collapses blank rows, so CSV position is not a sheet row
+
+**Situation:** the write plan addressed cells by row number derived from CSV
+position (`sheetRow = index + 2`). Checked against the live sheet: **4 of 5
+queue rows were wrong, all off by 3**, because `Form Responses 1` holds 3 blank
+rows that gviz drops. Writing the `Speaking` tick for DevFest Campobasso at the
+derived row 111 would have ticked it on "Software Development Superstream" — a
+different person's entry — and the read-back would have shown a successful write
+to row 111.
+
+Confirmed gviz drops blanks **even inside an explicit range**: `A1:J30` over the
+Approvals tab returns 13 lines, not 30. So no full-tab read can ever report true
+row numbers.
+
+**Decision:** never write to a row number derived from CSV position.
+**Rule:** `resolveSheetRow()` scans down from the CSV estimate (a lower bound —
+blanks only push content down) and confirms email + event name before returning
+a row. It throws rather than guessing. Verified on the live queue: offsets +0
+and +3, 5 of 5 resolved. Reads that need row numbers use single-row ranges.
+**Status:** graduated to `scripts/sheet/lib/rowmap.js`.
+
+### 2026-08-28 — Playwright cannot attach reliably; use raw CDP for reads
+
+**Situation:** `connectToChrome()` hung repeatedly with 11 targets open — below
+our own 12-target warn threshold — because `connectOverCDP` auto-attaches to
+every target and waits for each, and four of them were Notion SPAs.
+**Decision:** reads do not need Playwright. A gviz fetch is one
+`Runtime.evaluate` in one already-open tab.
+**Rule:** `scripts/shared/cdp-eval.js` talks raw CDP for reads. Playwright stays
+for driving the Sheets UI, where typing and key events are needed.
+**Status:** graduated.
+
+### 2026-08-28 — where an approved row goes, and `Date Approved`
+
+**Situation:** I had documented "append to the first empty row", then found the
+tab is sectioned and concluded a row _insert_ was needed — which the Name Box
+write path cannot do. That framing was wrong.
+**Decision (Ryan):** just add the next row down — `A14:H14`, then 15, 16, and so
+on into the blank rows below the data. **`In consideration` sits at sheet row 26**,
+and only when the data reaches it does it get moved further down, by hand.
+Also `J<row>` = **`Date Approved`, set to the current date**. (Ryan is behind on
+filling these historically — 1 of 9 rows — but the intent is to fill it.)
+**Rule:** append to the first blank row after the last data row; never insert.
+Write `A`–`F` and `H`, skip `G` (`Actuals`) by tabbing past it, and set `J` to
+today's date. If the target row reaches 26, **stop and ask** — moving the
+`In consideration` label is Ryan's call, not the script's.
+**Status:** graduated — supersedes the earlier "leave `Date Approved` blank"
+proposal below, which was inferred from the 1-of-9 fill rate and was wrong.
+
 ### 2026-08-28 — `readTab` returned a silent zero on the Approvals tabs
 
 **Situation:** found in the first test run. `isDataRow` requires an email in
@@ -75,7 +124,10 @@ called before any sheet write. Currently 112/112 intact.
 for later). `Date Approved` is filled in only 1 of 9.
 **Decision:** proposed — write neither.
 **Rule:** the write script never touches `Actuals` or `Date Approved`.
-**Status:** open — `Actuals` is settled, `Date Approved` needs confirmation.
+**Status:** ⚠️ **SUPERSEDED** 2026-08-28. `Actuals` stands — never written. But
+`Date Approved` _should_ be written with the current date; the 1-of-9 fill rate
+was a backlog, not a convention. A lesson about inferring rules from sparse
+fill rates: absence of data is not evidence of intent.
 
 ### 2026-08-28 — `Speaking` is not a processed marker
 
