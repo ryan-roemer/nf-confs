@@ -116,52 +116,49 @@ by reading the **cells**, not the header row.
 
 ## Open questions
 
-Most of the original five were answered by reading both systems — see
-[schema.md](schema.md). What survives:
+Answered so far, and by what: see [decisions.md](decisions.md). What remains,
+in the order it blocks work.
 
-**Q1. What does "unprocessed" mean — funded, or in Notion?** These turned out to
-be different axes. The tracking tab already carries sheet-side workflow state
-(`Funded`, `Speaking`, `Email/Slack Sent`), but none of it says whether the event
-reached the Events Calendar. Two readings:
+**Q1. Where does an approved row go in `2026 Approvals`?** The tab is
+sectioned — totals at row 2, the label `Approved` at row 3, data at 4–12, the
+label `In consideration` at row 13. So "append to the first empty row" would
+file an approved entry under the wrong heading. Options:
 
-- _"Not yet actioned in the program"_ — driven by the tracking tab's own flags.
-- _"Not yet in Notion"_ — derived by joining `Event website` → Notion `Link`.
+- Write into the last row of the `Approved` section, if there is a spare.
+- **Insert** a row at the section boundary — which the Name Box write path
+  cannot do; that needs a right-click row insert, or a different write path.
+- Something else you already do by hand that isn't visible in the data.
 
-Leaning: derive Notion presence by the URL join (needs no sheet writes,
-self-heals, always current) and treat the tracking flags as a separate,
-sheet-owned concern. Confirm which one you actually mean.
+This is the one blocking question for the sheet write script.
 
-**Q2. Which tab is `gid=1701569290`, and what are the tab names?** The Drive
-read cannot see tab names or gids, and `gviz` needs one or the other. One
-signed-in read settles it.
+**Q2. Currency in the Approvals money columns.** Existing cells render `€200`,
+`€70.00`, `€1,020` — inconsistent decimals in one column. gviz returns the
+_formatted_ value, so it cannot tell us whether the cell holds a number with a
+currency format or literal text. If it's formatting, the script types `150` and
+the sheet does the rest; if it's text, the script types `€150`. One check in the
+UI settles it.
 
-**Q3. Does an event with no `Event website` happen?** The URL join is the whole
-matching strategy, so rows missing it need a rule — fall back to name + date, or
-flag for review. Worth a count before deciding.
+**Q3. Does the script compute `Total`?** It is hand-entered today and already
+inconsistent with travel + accommodation on 2 of 9 rows. Computing it would be
+deterministic and would quietly correct history; preserving hand entry keeps the
+sheet as the human record.
 
-**Q4. Should budget and approval data reach Notion at all?** The framing was
-budget and approval management, but the two systems don't overlap there: money,
-leave, travel, expensing and the three named approvers live only in the sheet;
-the Events Calendar has no cost, budget or approver property, only `Status`.
-Three ways to go:
+**Q4. Which wins when the conference page and the prior-year Notion page
+disagree?** The first test run hit this on `Location`, `Audience` and
+`Affliation` for **both** events it dry-ran. `workflow.md` says the conference
+`Link` is the source of truth, but the prior-year page carries house style for
+exactly these fields. A standing rule would remove three escalations per event.
 
-- _Leave it in the sheet._ Notion gets events + speakers, which is what the
-  Events Calendar is for. Simplest, and matches how each system is already used.
-- _Add properties to Notion_ (Budget, Approval Status, Approvers) and sync them.
-  Makes Notion the single view, but it's a schema change to a shared team
-  database — other people's views depend on it.
-- _Report separately._ Leave both schemas alone and generate the
-  "what have we committed / what's pending" rollup from the sheet, which already
-  has per-person budget tabs doing this by hand.
+**Q5. Should "already correct, nothing to do" be its own outcome?** Row 49 is an
+`update` to a page that already looks right. Two rows are in that state today
+and more will accumulate. A no-op write is noise; an explicit outcome is
+information.
 
-Leaning: the third for the budget question, the first for the sync. But this is
-your call and it's the one that decides how much of the project exists.
+**Q6. Row 110 asks for travel with no estimate.** Block the entry, or write the
+Approvals row with travel blank?
 
-**Q5. How do the value maps work?** `Proposed engagement:` → `Engagement`,
-`Event Category` → `Tags`, `Audience:` → `Audience`. Notion's option lists are
-long and curated (44 tags, 24 audiences); the form's are free-ish. These need a
-lookup table you approve, not a guess — and unmapped values should fail loudly
-rather than get dropped.
+**Q7. `2026 Approvals` leads with `Email`, `2025 Approvals` with `Name`.** Which
+is the going-forward shape?
 
 ## Phases
 

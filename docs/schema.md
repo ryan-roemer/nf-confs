@@ -80,9 +80,17 @@ pass via the Drive connector, which undercounted every tab.
 
 ### `Speaking Events` mirrors `Form Responses 1` row for row
 
-112 of 112 rows align on (`Email Address`, `Name of the Event or Conference`);
-108 of 112 also agree on start date, so **4 rows disagree on the date** and are
-worth a look. Columns 0–5 are identical in both (timestamp, email, event name,
+112 of 112 rows align on (`Email Address`, `Name of the Event or Conference`).
+Four rows hold the start date in different _formats_ (`17/10/2026` vs
+`2026-10-17`) but **zero disagree in meaning** — an earlier note here claimed a
+disagreement and was wrong. Ryan norms toward ISO by hand over time, which is
+why the formats diverge without the dates diverging.
+
+That makes the twin an **independent witness on the date**: where the form still
+holds `DD/MM/YYYY`, the twin is often already ISO. `resolveDate()` uses it, and
+across the live sheet it confirms 106 rows outright and cuts the
+typographically-ambiguous set from 3 to 1 (row 109, `09/11/2026`, where the twin
+is also ambiguous). Columns 0–5 are identical in both (timestamp, email, event name,
 start date, duration, location), which is the signature of an ARRAYFORMULA
 mirror. The workflow columns sit alongside it:
 
@@ -135,13 +143,47 @@ Of 112 data rows: **112 carry an email**, **112 carry an `Event website`**. Thre
 further lines have partial content and no email — treat as incomplete rows, not
 as data. 64 distinct website hosts across the 112.
 
-### Tabs 2 and 3 are layouts, not tables
+### Tabs 2 and 3 are sectioned layouts, not tables
 
-`2025 Approvals` and `2026 Approvals` share a shape but not their headers —
-2025 leads with `Name`, 2026 with `Email` — and interleave totals and an
-`Approved` marker with the data rather than presenting a clean header row.
-Totals: 2025 = €5,610 across 20 confs / 12 leave days; 2026 = €2,365 across
-9 confs / 8 leave days. These need reading positionally, or by hand.
+This matters for writing, so here is the real structure of `2026 Approvals`:
+
+| Row  | Content                                                                                                                            |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | headers — `Email` · `Conf` · `Date` · `Travel` · `Accomodations` · `Total` · `Actuals` · `Leave Days` · (spacer) · `Date Approved` |
+| 2    | **column totals** (€1,020 · €1,565 · €2,365 · · 8)                                                                                 |
+| 3    | the label `Approved`                                                                                                               |
+| 4–12 | 9 data rows                                                                                                                        |
+| 13   | the label `In consideration`                                                                                                       |
+
+⚠️ **"Append to the first empty row" is wrong** and would file an approved
+entry under `In consideration`. A write has to find the section boundary, and
+growing the `Approved` section may need a **row insert** — which the Name Box
+path cannot do. Unresolved; see the open questions in [plan.md](plan.md).
+
+`2025 Approvals` shares the shape but leads with `Name` where 2026 leads with
+`Email`. Totals: 2025 = €5,610 across 20 confs / 12 leave days; 2026 = €2,365
+across 9 confs / 8 leave days.
+
+Observed conventions in the 9 existing 2026 rows:
+
+- `Leave Days` is `1` where leave was requested and **blank** where it wasn't —
+  never `0`.
+- `Actuals` is empty in all 9.
+- `Date Approved` is filled in 1 of 9.
+- Currency rendering is inconsistent: `€200`, `€70.00`, `€1,020`. Whether that
+  is cell formatting over a bare number or typed text **cannot be told from
+  gviz**, which returns the formatted value either way.
+- `Total` is hand-entered and does not always equal travel + accommodation —
+  row 11 has accommodation €200 with total €250, and row 12 has €70.00 + €300.00
+  with total €250.
+
+### `readTab` needs the right predicate per tab
+
+The Approvals tabs put the email in **column 0**; `Form Responses 1` and
+`Speaking Events` put it in column 1 with the event name in column 2. The
+default `isDataRow` predicate therefore matches nothing on Approvals. It used to
+return zero rows silently — indistinguishable from an empty tab — and now throws
+instead.
 
 ### Tab 4 is empty
 

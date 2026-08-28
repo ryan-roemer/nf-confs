@@ -117,7 +117,44 @@ const main = async () => {
     }
   }
 
-  // Coverage. A quiet plan and a broken input must never look alike.
+  // Coverage. A quiet plan and a broken input must never look alike — and an
+  // under-matched candidates.json looks exactly like a genuine absence unless
+  // we say how many events actually drew a candidate.
+  // Only a URL or NAME signal counts as coverage. A shared year is a
+  // coincidence, not evidence of identity — crediting it would report a
+  // genuinely-absent event as "found a candidate".
+  const identitySignal = (c) =>
+    c.signals.some(
+      (s) =>
+        s.startsWith("url:exact") ||
+        s.startsWith("url:same-host") ||
+        s.startsWith("name:"),
+    );
+  const covered = (p) =>
+    Boolean(p.result.best) || p.result.candidates.some(identitySignal);
+
+  const withCandidates = plan.filter(covered).length;
+  const noSignal = plan.filter((p) => !covered(p));
+
+  console.log(`\n\nCandidate coverage:`);
+  console.log(`  events queued              ${queue.length}`);
+  console.log(`  pages in candidates.json   ${cand.pages.length}`);
+  console.log(`  events with any signal     ${withCandidates}`);
+  console.log(`  events with NO signal      ${noSignal.length}`);
+  for (const p of noSignal) {
+    console.log(
+      `      row ${p.record.sheetRow} ${p.record.name} — either genuinely absent ` +
+        `from Notion, or the query missed it`,
+    );
+  }
+  if (noSignal.length > 0) {
+    console.log(
+      `  A zero-signal event is only trustworthy if the query covered BOTH a\n` +
+        `  URL fragment and a name fragment for it. Confirm before creating:\n` +
+        `  ${cand.query ?? "(no query recorded in candidates.json)"}`,
+    );
+  }
+
   const count = (v) => plan.filter((p) => p.result.verdict === v).length;
   console.log(
     `\n\nPlanned ${plan.length} of ${queue.length} queued record(s):`,

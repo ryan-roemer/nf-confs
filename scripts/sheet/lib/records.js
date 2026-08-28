@@ -14,6 +14,7 @@ import {
   isYes,
   parseStartDate,
   readTab,
+  resolveDate,
 } from "./rows.js";
 
 export const FORM_CSV = ".data/sheet/0-form-responses-1.csv";
@@ -61,7 +62,13 @@ const g = (row, i) => (row?.[i] ?? "").trim();
 /** Build one canonical record from a form row and its Speaking Events twin. */
 const toRecord = (form, fi, speak, si, index) => {
   const engagement = g(form, fi[C.engagement]);
-  const start = parseStartDate(g(form, fi[C.start]));
+  // The Speaking Events twin is an independent witness on the date: the two
+  // tabs mirror each other and Ryan norms toward ISO by hand, so the twin is
+  // often already unambiguous where the form is not.
+  const start = resolveDate(
+    parseStartDate(g(form, fi[C.start])),
+    g(speak, si.start),
+  );
   const duration = g(form, fi[C.duration]);
   const travelCost = classifyCost(g(form, fi[C.travelCost]));
   const hotelCost = classifyCost(g(form, fi[C.hotelCost]));
@@ -135,6 +142,9 @@ export const loadRecords = async () => {
     Object.values(C).map((name) => [name, colIndex(form.header, name)]),
   );
   const si = {
+    email: colIndex(speak.header, "Email Address"),
+    name: colIndex(speak.header, "Name of the Event or Conference"),
+    start: colIndex(speak.header, "Event start date"),
     funded: colIndex(speak.header, "Funded"),
     speaking: colIndex(speak.header, "Speaking"),
     emailSlackSent: colIndex(speak.header, "Email/Slack Sent"),
@@ -149,11 +159,59 @@ export const loadRecords = async () => {
   }
 
   const records = form.rows.map((row, i) => {
-    const r = toRecord(row, fi, speak.rows[i], si, i);
-    return { ...r, triage: triage(r) };
+    const twin = speak.rows[i];
+    const r = toRecord(row, fi, twin, si, i);
+
+    // The row-for-row mirror is an assumption, and every sheet write is
+    // addressed by row index — so a slipped pairing would tick `Speaking` on
+    // someone else's row. Verify identity per row, not just the row count.
+    const mirror =
+      twin &&
+      g(row, fi[C.email]).toLowerCase() === g(twin, si.email).toLowerCase() &&
+      g(row, fi[C.name]) === g(twin, si.name)
+        ? { ok: true }
+        : {
+            ok: false,
+            why: twin
+              ? `form has ${JSON.stringify(g(row, fi[C.email]))}/` +
+                `${JSON.stringify(g(row, fi[C.name]))} but Speaking Events row ` +
+                `has ${JSON.stringify(g(twin, si.email))}/` +
+                `${JSON.stringify(g(twin, si.name))}`
+              : "no corresponding Speaking Events row",
+          };
+
+    return { ...r, mirror, triage: triage(r) };
   });
 
-  return { records, warnings };
+  const broken = records.filter((r) => !r.mirror.ok);
+  if (broken.length > 0) {
+    warnings.push(
+      `${broken.length} of ${records.length} rows do not match their Speaking ` +
+        `Events twin. Sheet writes are addressed by row index, so DO NOT WRITE ` +
+        `until this is resolved:\n` +
+        broken
+          .slice(0, 5)
+          .map((r) => `    row ${r.sheetRow}: ${r.mirror.why}`)
+          .join("\n"),
+    );
+  }
+
+  return { records, warnings, mirrorOk: broken.length === 0 };
+};
+
+/**
+ * Guard for anything that writes to the sheet by row index. Callers must run
+ * this before a write, not merely log the warning.
+ */
+export const assertMirrorIntact = ({ records, mirrorOk }) => {
+  if (!mirrorOk) {
+    const broken = records.filter((r) => !r.mirror.ok);
+    throw new Error(
+      `Refusing to write: ${broken.length} row(s) do not match their Speaking ` +
+        `Events twin, and every sheet write is addressed by row index.\n` +
+        broken.map((r) => `  row ${r.sheetRow}: ${r.mirror.why}`).join("\n"),
+    );
+  }
 };
 
 /** The records this workflow acts on: speaking, not yet processed. */

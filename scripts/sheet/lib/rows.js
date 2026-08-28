@@ -59,15 +59,37 @@ export const isDataRow = (row) =>
   row.length > 2 && row[1]?.includes("@") && row[2]?.trim() !== "";
 
 /**
- * Read a saved tab into { header, rows } with only real data rows.
+ * Read a saved tab into { header, rows }, keeping only rows the predicate
+ * accepts.
+ *
+ * **Throws when a non-empty file yields zero rows.** `isDataRow` is shaped for
+ * the two big form-backed tabs (email in column 1, name in column 2); the
+ * Approvals tabs put the email in column 0, so the default predicate matched
+ * nothing there and this function used to return an empty list — a silent zero
+ * indistinguishable from "the tab really is empty". Abstaining loudly is the
+ * rule (see CLAUDE.md), so a predicate that matches nothing is an error.
+ *
  * @param {string} path
+ * @param {(row: string[]) => boolean} [predicate]
  */
-export const readTab = async (path) => {
+export const readTab = async (path, predicate = isDataRow) => {
   const all = parseCsv(await readFile(path, "utf8"));
-  return {
-    header: all[0] ?? [],
-    rows: all.slice(1).filter(isDataRow),
-  };
+  const header = all[0] ?? [];
+  const body = all.slice(1);
+  const rows = body.filter(predicate);
+
+  if (rows.length === 0 && body.some((r) => r.some((c) => c.trim() !== ""))) {
+    throw new Error(
+      `${path}: the row predicate matched 0 of ${body.length} non-header ` +
+        `rows, but the file is not empty.\n` +
+        `This is almost always the wrong predicate for this tab rather than an ` +
+        `empty tab — the default expects an email in column 1 and a name in ` +
+        `column 2, which is the shape of Form Responses 1 and Speaking Events, ` +
+        `not of the Approvals tabs.\n` +
+        `Header: ${header.map((h, i) => `[${i}] ${JSON.stringify(h)}`).join(", ")}`,
+    );
+  }
+  return { header, rows };
 };
 
 /**
@@ -115,8 +137,10 @@ export const parseStartDate = (raw) => {
     const pad = (n) => String(n).padStart(2, "0");
     return {
       iso: `${y}-${pad(month)}-${pad(day)}`,
-      // Both <= 12 AND different means DD/MM and MM/DD give different real
-      // dates. Equal parts (10/10) read the same either way.
+      // Day-first is this form's established convention, confirmed by values
+      // like 17/10/2026 and by every ISO twin checked so far. So the parse is
+      // not a guess. It is still *typographically* ambiguous when both parts
+      // are <= 12 and differ, which `resolveDate` settles against the twin.
       ambiguous: day <= 12 && day !== month,
       raw: s,
     };
@@ -244,3 +268,45 @@ export const isYes = (v) => (v ?? "").trim().toLowerCase() === "yes";
 
 /** A checkbox column holds the literal strings TRUE / FALSE. */
 export const isChecked = (v) => (v ?? "").trim().toUpperCase() === "TRUE";
+
+/**
+ * Settle a `Form Responses 1` date against its `Speaking Events` twin.
+ *
+ * The two tabs are a row-for-row mirror, and Ryan norms toward `YYYY-MM-DD` by
+ * hand over time — so the twin is frequently already ISO for a row the form
+ * still holds as `DD/MM/YYYY`. That makes the twin an independent witness:
+ *
+ *   - twin agrees          -> confirmed, ambiguity resolved
+ *   - twin is ISO and says otherwise -> a real conflict; ask, never pick
+ *   - twin is also ambiguous -> unresolved; day-first stands but say so
+ *
+ * Measured on the live sheet: 4 of 112 rows differ in format, **0 in meaning**,
+ * and 2 of the 3 typographically ambiguous rows are settled this way.
+ *
+ * @param {ReturnType<typeof parseStartDate>} primary  from Form Responses 1
+ * @param {string} twinRaw  the same row's Speaking Events value
+ */
+export const resolveDate = (primary, twinRaw) => {
+  const twin = parseStartDate(twinRaw);
+  const twinIsIso =
+    twin.iso !== null && !twin.ambiguous && ISO_RE.test((twinRaw ?? "").trim());
+
+  if (primary.iso && twin.iso && primary.iso !== twin.iso) {
+    return {
+      ...primary,
+      conflict: { twin: twin.iso, twinRaw: twin.raw },
+      confirmedBy: null,
+      ambiguous: primary.ambiguous,
+    };
+  }
+  if (primary.iso && twin.iso && primary.iso === twin.iso) {
+    return {
+      ...primary,
+      conflict: null,
+      // An ISO twin agreeing settles the typographic ambiguity outright.
+      confirmedBy: twinIsIso ? "iso-twin" : "twin",
+      ambiguous: twinIsIso ? false : primary.ambiguous,
+    };
+  }
+  return { ...primary, conflict: null, confirmedBy: null };
+};
