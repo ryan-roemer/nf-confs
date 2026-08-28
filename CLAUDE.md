@@ -1,9 +1,28 @@
 # CLAUDE.md
 
 Tooling for managing Nearform conference speaking budgets and approvals. A
-Google Sheet is the intake side, a Notion "events hub" database is the record
-side, and this repo bridges them. [README.md](README.md) has the tour;
-[docs/plan.md](docs/plan.md) has the design and the open questions.
+Google Sheet is the intake side, the Notion Events Calendar is the record side,
+and this repo bridges them.
+
+- **[docs/workflow.md](docs/workflow.md)** — the authority on every field
+  mapping. Never invent a mapping; if it isn't there, ask.
+- **[docs/schema.md](docs/schema.md)** — what both systems actually contain,
+  from live reads, including the parsing traps.
+- **[docs/decisions.md](docs/decisions.md)** — judgment calls Ryan has made.
+  Append to it; promote a rule after the third repeat.
+- **[docs/plan.md](docs/plan.md)** — design, verified write paths, open questions.
+- **`/conf-process`** — the skill that drives the workflow. Don't hand-roll a
+  thin version of it in an ordinary session.
+
+## The deterministic/judgment split
+
+Scripts decide everything decidable from data. Inference is for judgment only,
+and four things are Ryan's alone and must never be inferred: **accepting a
+budget**, **currency conversion**, **picking between two plausible Notion
+pages**, and **reconciling a conference link that contradicts the sheet**.
+
+When Ryan makes a judgment call, log it in `docs/decisions.md` — that log is how
+inference gets traded for certainty.
 
 ## Working here
 

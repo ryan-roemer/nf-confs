@@ -53,8 +53,24 @@ useful. `npm run chrome:status` names this state directly, and both
 accumulated tabs eat the connect budget before our code runs. Close the strays,
 or relaunch — the profile has no session restore, so it comes back clean.
 
+## Commands
+
+```bash
+npm run chrome:status          # is the conference Chrome up and signed in?
+npm run chrome:login           # open the sign-in tabs
+npm run sheet:probe -- --save  # exact per-tab read -> .data/sheet/*.csv
+npm run sheet:pending          # the queue: what's waiting on a decision
+npm run notion:match           # update-vs-create plan against the Events Calendar
+npm run format                 # eslint --fix + prettier
+```
+
+The workflow itself runs through the **`/conf-process`** skill, which calls
+these and asks for a decision wherever one is needed.
+
 ## Status
 
-Early. The Chrome launcher works; the sheet reader and the Notion writer are
-next. See [docs/plan.md](docs/plan.md) for the shape of the work and the open
-questions.
+Working: the Chrome launcher, the exact sheet read, Stage 1 triage, and the
+Notion matcher. Both write paths are verified but not yet built as scripts —
+Notion via the connector's typed API calls, Sheets via the Name Box over CDP.
+
+See [docs/plan.md](docs/plan.md) for the design and what's left.

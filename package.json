@@ -6,11 +6,13 @@
   "private": true,
   "scripts": {
     "chrome": "node scripts/chrome.js",
+    "test": "node --test scripts/**/*.test.js",
     "chrome:run": "node scripts/chrome.js --run",
     "chrome:login": "node scripts/chrome.js --login",
     "chrome:status": "node scripts/chrome.js --status",
     "sheet:probe": "node scripts/sheet/probe.js",
     "sheet:pending": "node scripts/sheet/pending.js",
+    "notion:match": "node scripts/notion/match.js",
     "lint": "eslint . --fix",
     "pretty": "prettier . --write",
     "format": "npm run lint && npm run pretty"
