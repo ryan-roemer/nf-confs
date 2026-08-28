@@ -69,8 +69,15 @@ these and asks for a decision wherever one is needed.
 
 ## Status
 
-Working: the Chrome launcher, the exact sheet read, Stage 1 triage, and the
-Notion matcher. Both write paths are verified but not yet built as scripts —
-Notion via the connector's typed API calls, Sheets via the Name Box over CDP.
+End-to-end working, and exercised once for real (DevFest Campobasso, 2026-08-28):
+triage, the Notion matcher, a Notion page create, and the sheet write — Approvals
+row plus the `Speaking` tick, verified on two independent paths.
+
+**Read [docs/decisions.md](docs/decisions.md) before changing the write path.**
+It records an incident where a write landed in the wrong worksheet and corrupted
+a live record, and the guards that now prevent it. The short version: a cell
+reference is meaningless without its worksheet, so writes address
+`'Tab Name'!A14` atomically and refuse to touch a cell whose current content
+isn't what was expected.
 
 See [docs/plan.md](docs/plan.md) for the design and what's left.

@@ -142,11 +142,9 @@ inconsistent with travel + accommodation on 2 of 9 rows. `write.js` currently
 computes it. Computing it quietly corrects history; preserving hand entry keeps
 the sheet as the human record.
 
-**Q2. Currency in the Approvals money columns.** Existing cells render `€200`,
-`€70.00`, `€1,020`. gviz returns the formatted value, so it cannot tell us
-whether the cell holds a number with a currency format or literal text. The
-write path types a bare number, which is right if the column carries a currency
-format. The first real write will settle it — check how row 14 renders.
+**Q2. ~~Currency in the Approvals money columns.~~ ANSWERED 2026-08-28** — the
+columns carry a currency format; a typed `70` renders `€70`. Type bare numbers.
+See [decisions.md](decisions.md).
 
 **Q3. Which wins when the conference page and the prior-year Notion page
 disagree?** The first test run hit this on `Location`, `Audience` and
@@ -180,7 +178,11 @@ Each phase ends at something runnable, with a checkpoint for you.
   match against a saved Notion snapshot. Output a report: N rows read, N matched,
   N new, N ambiguous. No writes at all. _Checkpoint: you check the report's
   verdicts by hand — especially the ambiguous ones._
-- **Phase 3 — write, dry-run first.** `sync --dry-run` prints the exact pages and
+- **Phase 3 — write, dry-run first. [DONE]** `sheet:write` has dry-run default,
+  `--apply`, and `--verify`. First live write (DevFest Campobasso) completed and
+  verified on both paths 2026-08-28, after an incident and remedy — read
+  [decisions.md](decisions.md) before touching the write path.
+- ~~Phase 3 (original wording)~~ `sync --dry-run` prints the exact pages and
   properties it would create. Then real writes behind an explicit flag, with a
   row cap. _Checkpoint: one real page, created and inspected, before any batch._
 - **Phase 4 — speakers, then budgets.** Speaker assignment on top of matched

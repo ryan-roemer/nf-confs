@@ -140,22 +140,39 @@ Only for entries Ryan accepted, and only after Notion succeeded.
 ```bash
 npm run sheet:write -- --event "<name>"           # dry run, always first
 npm run sheet:write -- --event "<name>" --apply   # write
+npm run sheet:write -- --event "<name>" --verify  # re-check an earlier write
 ```
 
 Show Ryan the dry run and get an explicit go-ahead before `--apply`.
 
-The script enforces the rules; do not work around it:
+**Read [docs/decisions.md](../../../docs/decisions.md) before changing anything
+in this path.** On 2026-08-28 a write landed in the wrong worksheet and
+overwrote a live record. The guards below exist because of it — do not route
+around them.
 
-- **Rows are resolved, never derived.** gviz collapses blank rows, so a record's
-  CSV position is not its sheet row — the live queue is off by 3. A derived row
-  number ticks `Speaking` on someone else's entry and reads back as success.
-- `G` (`Actuals`) and `M` (`Email/Slack Sent`) are **never** written. `M` is the
-  marker that takes the record out of the queue, and it is Ryan's.
+- **Writes address `'Tab Name'!A14` atomically.** The Name Box accepts a
+  sheet-qualified reference and switches worksheets itself. Never click a
+  worksheet tab; never let the active tab be ambient state. A cell reference is
+  meaningless without its worksheet — column L is a checkbox on one tab and free
+  text on another.
+- **A cell is only written if its current content is what was expected.**
+  Approvals targets must be empty; the checkbox must read exactly `TRUE`/`FALSE`.
+- **Rows are resolved, never derived.** gviz collapses blank rows, so CSV
+  position is not a sheet row — the live queue is off by 3.
+- **Idempotent.** If the record is already in the `Approved` section it reports
+  `ALREADY RECORDED` and skips the append. Reruns are safe.
+- `G` (`Actuals`) and `M` (`Email/Slack Sent`) are **never** written. `M` is
+  Ryan's, and it is what takes the record out of the queue.
 - Appends stop at the `In consideration` label (row 26). If the section fills,
-  **ask Ryan to move the label** — never move it yourself.
-- Every write is read back and compared cell by cell. A write that cannot be
-  verified is a failure, not a success. Report it as one.
+  **ask Ryan to move it** — never move it yourself.
+- Money columns carry a currency format: **type bare numbers**, never `€`.
 - `without requesting support` entries skip the Approvals write entirely.
+
+### If the browser is not ready
+
+Preconditions **flag and stop** — signed out, wrong workbook, editor not loaded.
+Report what is wrong and hand it to Ryan; never try to fix it silently. He is
+supervising and would rather be told.
 
 ## Capturing decisions
 

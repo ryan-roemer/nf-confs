@@ -26,27 +26,35 @@ the full context, so bring the report back and do the write there.
 
 ## Known-good baseline
 
-If these numbers come out different, either the sheet changed or something
-regressed. Note which.
+As of **2026-08-28**, after the DevFest Campobasso trial. If these differ,
+either the sheet changed or something regressed — say which.
 
-| Check                    | Expected                                                 |
-| ------------------------ | -------------------------------------------------------- |
-| `npm test`               | 8 pass, 0 fail                                           |
-| Form Responses data rows | 112                                                      |
-| Speaking engagements     | 98 (78 with a budget ask, 20 without)                    |
-| Triage                   | 4 pending · 1 part-processed · 93 done · 14 not speaking |
-| Flags raised             | exactly 1 — row 110, travel requested but no estimate    |
-| Queue                    | rows 49, 110, 111, 112, 113                              |
+| Check                    | Expected                                                     |
+| ------------------------ | ------------------------------------------------------------ |
+| `npm test`               | 8 pass, 0 fail                                               |
+| Form Responses data rows | 112                                                          |
+| Speaking engagements     | 98 (78 with a budget ask, 20 without)                        |
+| Triage                   | **3 pending · 2 part-processed** · 93 done · 14 not speaking |
+| Flags raised             | exactly 1 — row 110, travel requested but no estimate        |
+| Queue                    | rows 49, 110, 111, 112, 113                                  |
 
-Match verdicts:
+⚠️ Run `npm run sheet:probe -- --save` first. `.data/` is a snapshot, and a
+stale one will show a completed record as still pending.
 
-| Row | Event                       | Verdict  | Why it matters                                    |
-| --- | --------------------------- | -------- | ------------------------------------------------- |
-| 49  | We Make Future              | `update` | already Confirmed with a speaker — likely a no-op |
-| 110 | Ticino Data Conference 2026 | `create` | no candidates at all                              |
-| 111 | DevFest Campobasso          | `create` | 2025 exists as template; year is in the URL       |
-| 112 | Come To Code                | `create` | **2024 and 2025 share the same URL**              |
-| 113 | DevFest Roma                | `create` | 2025 exists as template                           |
+**Row 111 (DevFest Campobasso) is DONE** — Notion page created, Approvals row 14
+written, `Speaking` ticked. It shows as _part-processed_ because
+`Email/Slack Sent` is Ryan's manual step. Rerunning it should report
+`ALREADY RECORDED` and skip the append; if it tries to append a duplicate, that
+is a regression.
+
+Remaining work, and what each exercises:
+
+| Row | Event                       | Verdict  | Exercises                                                                          |
+| --- | --------------------------- | -------- | ---------------------------------------------------------------------------------- |
+| 110 | Ticino Data Conference 2026 | `create` | no Notion candidates at all; **open question — travel requested with no estimate** |
+| 112 | Come To Code                | `create` | 2024 and 2025 share one URL — the recurring-series path                            |
+| 113 | DevFest Roma                | `create` | year-in-URL variant                                                                |
+| 49  | We Make Future              | `update` | **the update path, never yet exercised**                                           |
 
 ## Phase A — cold start
 
