@@ -23,6 +23,122 @@ re-doing. Those are the entries that actually improve the skill.
 
 ## Entries
 
+### 2026-08-28 — INCIDENT: wrote into the wrong worksheet, corrupting live data
+
+**What happened:** `sheet:write --apply` for DevFest Campobasso typed its
+Approvals row into `Form Responses 1` row 14 — a 2024 submission — and wrote
+`TRUE` over `L114` (`Objectives for the event:`). Ryan restored from undo;
+verified 15/15 cells back to the pre-write snapshot.
+
+**Mechanism:** two different row 14s. `2026 Approvals` row 14 was the correct
+append target; `Form Responses 1` row 14 was a real record. The script addressed
+the **cell** but treated the **worksheet as ambient state** — whatever tab was
+selected. `selectTab()` used a synthetic `element.click()` inside
+`Runtime.evaluate`; the Sheets tab strip is a Closure widget that listens for
+real pointer events, so the click did nothing and the tab never switched. A
+correct address then landed in the wrong coordinate space. Column L is the
+`Speaking` checkbox on one tab and free-text objectives on the other.
+
+**Why nothing caught it:**
+
+- The script logged `wrote 2026 Approvals row 14` — that was intent, not outcome.
+- Read-back verification looked only where the write was _supposed_ to go. It
+  correctly reported FAILED, and was blind to where the keystrokes actually went.
+- The synthetic click was introduced when Playwright was swapped for raw CDP.
+  The scratch workbook it was validated on had **one tab**, so the only
+  mechanism that broke was the one the test could not exercise — and the path
+  was then reported as "proven".
+
+**Rules:**
+
+1. **Never overwrite a non-empty cell.** Every append target must read blank;
+   a checkbox target must read exactly `TRUE` or `FALSE`. Anything else aborts.
+   This alone would have prevented every byte of this damage.
+2. **Address writes as (worksheet, cell), never as a cell plus ambient state.**
+   Verify the active worksheet name from the DOM, and the Name Box contents,
+   immediately before typing.
+3. **Verify through the same path the write travels.** A gviz pre-read validates
+   a different coordinate space than the keystrokes use, so it cannot catch a
+   worksheet mismatch.
+4. **One cell at a time: write, verify, continue.** A misdirected write then
+   damages at most one cell.
+5. **Never dispatch synthetic clicks at application chrome.** Use real input
+   events and confirm the state change took effect.
+6. **Test a mechanism on a fixture that contains its failure mode.** A
+   multi-tab workbook, or the test proves nothing about tab switching.
+
+**Remedy built, same day.** The Name Box turns out to accept a sheet-qualified
+reference — `'2026 Approvals'!A14` switches worksheets by itself. That makes
+worksheet+cell **one atomic address** and removes the failure mode at its root
+rather than guarding against it. On top of that:
+
+- `gotoCell(session, tab, ref)` verifies the active tab name AND the Name Box
+  after navigating, and throws if either disagrees.
+- `writeCell()` requires an explicit `allow` predicate for the cell's CURRENT
+  content — no default. Approvals targets must be empty; the checkbox target
+  must read exactly `TRUE` or `FALSE`.
+- Identity is re-proved on the typing path (formula bar), not just via gviz —
+  the two address different coordinate spaces.
+- One cell at a time: write, read back, stop on the first mismatch.
+- Independent gviz confirmation afterwards, as a second path.
+- Preconditions (not signed in, wrong tab, editor not loaded) **flag and stop**
+  for Ryan; the script never tries to fix them.
+
+Incidentally confirmed the root cause while building the test fixture: a
+synthetic click on the add-sheet button also did nothing, and the same click via
+`Input.dispatchMouseEvent` worked. Synthetic clicks do not work on Sheets chrome.
+
+**Verified on a MULTI-TAB scratch workbook — the fixture the original test
+lacked — 8 of 8 guards pass**, including the incident scenario: a write on the
+second worksheet did not leak onto the first.
+
+**Status:** remedy built and tested. `sheet:write --apply` is safe to run again
+under supervision.
+
+### 2026-08-28 — `Location` follows favoured style, not the prior year
+
+**Situation:** the sheet and the conference page both said `Campobasso, Italy`;
+the 2025 sibling said `Campobasso - Italy`. Across 9 located DevFest rows, 7 use
+`City, Italy` and 2 use `City - Italy`.
+**Decision (Ryan):** `City, Italy` is the favoured style. **Do not retro-fix
+existing rows.**
+**Rule:** write `City, Country`. When a prior-year page in the same series uses
+a different format, the favoured style wins — the prior year is a template for
+_content_, not a licence to copy its formatting mistakes. Never edit historical
+rows to match.
+**Status:** graduated — resolves the "conference page vs prior year" question
+for `Location`.
+
+### 2026-08-28 — `Affliation` is the umbrella org, not the chapter
+
+**Situation:** the conference page names **GDG Campobasso** as organiser.
+`Affliation` is null on all 13 DevFest pages — the field is new-ish and has not
+been filled historically.
+**Decision (Ryan):** use **`GDG`** — the umbrella organisation is the better
+affiliation than the specific local chapter. Explicitly flagged as often a
+judgment call.
+**Rule:** prefer the umbrella body (`GDG`, `Linux Foundation`, `CNCF`) over a
+local chapter or city edition. It stays a judgment call — when the umbrella is
+unclear, ask rather than guess.
+**Status:** open — one instance. Watch whether "umbrella over chapter" holds on
+a non-GDG event before treating it as settled.
+
+### 2026-08-28 — record CFP dates whenever they are determinable
+
+**Situation:** sessionize gave `CFP Opens 2026-07-15` and
+`CFP Deadline 2026-08-15` — already closed. Every prior DevFest page has both
+null, so I proposed matching the series and leaving them empty.
+**Decision (Ryan):** **fill them in**, precisely so people can see the CFP is
+closed. The historical nulls are a gap in attention, not a convention.
+**Rule:** set `CFP Opens` and `CFP Deadline` whenever the CFP link yields them,
+including for a CFP that has already closed. A closed CFP is useful information,
+not noise.
+**Status:** graduated.
+
+**Lesson repeated:** this is the second time today a sparse fill rate was read
+as intent and was wrong — `Date Approved` was the first. A field being mostly
+empty is not evidence that it should stay empty. Ask.
+
 ### 2026-08-28 — three tune-ups from the first test run
 
 **Situation:** the cold-session test surfaced three inconsistencies in the

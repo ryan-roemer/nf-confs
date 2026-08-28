@@ -24,7 +24,12 @@
 
 import { readFile } from "node:fs/promises";
 
-import { CdpSession, gotoCell } from "../shared/cdp-session.js";
+import {
+  CdpSession,
+  getActiveTab,
+  readCell,
+  writeCell,
+} from "../shared/cdp-session.js";
 import { gvizCsv, pickTarget } from "../shared/cdp-eval.js";
 import { assertMirrorIntact, loadRecords, queueOf } from "./lib/records.js";
 import { parseCsv } from "./lib/rows.js";
@@ -184,117 +189,190 @@ const main = async () => {
     return;
   }
 
-  // --- Write ---
+  // --- Preconditions. If the browser is not ready, that is Ryan's to fix. ---
   const session = await CdpSession.open(GOOGLE);
   try {
-    await session.send("Page.enable");
-    await session.send("Page.navigate", {
-      url: `https://docs.google.com/spreadsheets/d/${key}/edit`,
-    });
-    for (let i = 0; i < 40; i++) {
-      await session.wait(1000);
-      if (await session.evaluate(`!!document.querySelector("#t-name-box")`))
-        break;
+    const ready = await session.evaluate(`
+      (() => ({
+        url: location.href,
+        editor: !!document.querySelector("#t-name-box"),
+        signInWall: /accounts[.]google[.]com|ServiceLogin/.test(location.href),
+      }))()
+    `);
+
+    if (ready.signInWall || !ready.url.includes(key)) {
+      throw new Error(
+        `The conference Chrome is not sitting on the workbook.\n` +
+          `  current tab: ${ready.url}\n\n` +
+          `Over to you — open the workbook in that Chrome (and sign in if it is\n` +
+          `asking), then rerun:\n` +
+          `  npm run chrome:login\n` +
+          `  https://docs.google.com/spreadsheets/d/${key}/edit`,
+      );
     }
-    await session.wait(2500);
+    if (!ready.editor) {
+      throw new Error(
+        `The Sheets editor has not loaded in that tab (no Name Box).\n` +
+          `  current tab: ${ready.url}\n\n` +
+          `Over to you — let it finish loading, or reload it, then rerun.`,
+      );
+    }
+    console.log(
+      `\n  editor ready, active tab: ${JSON.stringify(await getActiveTab(session))}`,
+    );
 
-    const selectTab = async (name) => {
-      const ok = await session.evaluate(`
-        (() => {
-          const tabs = [...document.querySelectorAll(".docs-sheet-tab-name")];
-          const t = tabs.find((e) => e.textContent.trim() === ${JSON.stringify(name)});
-          if (!t) return false;
-          t.click();
-          return true;
-        })()
-      `);
-      if (!ok) throw new Error(`Worksheet tab not found: ${name}`);
-      await session.wait(1500);
-    };
+    // --- Identity check IN THE WRITE'S OWN COORDINATE SPACE. ---
+    // resolveSheetRow proved the row via gviz, which addresses by tab name.
+    // Typing addresses by what the Name Box selected. Those are different
+    // paths, so the identity has to be re-proved on the path we will type
+    // through, or a navigation failure can still land us on a live record.
+    const seenEmail = await readCell(session, SPEAKING_TAB, `B${speakRow.row}`);
+    const seenName = await readCell(session, SPEAKING_TAB, `C${speakRow.row}`);
+    if (
+      seenEmail.trim().toLowerCase() !== record.email.trim().toLowerCase() ||
+      seenName.trim() !== record.name.trim()
+    ) {
+      throw new Error(
+        `Refusing to write. ${SPEAKING_TAB} row ${speakRow.row} holds\n` +
+          `  ${JSON.stringify(seenEmail)} / ${JSON.stringify(seenName)}\n` +
+          `but this record is\n` +
+          `  ${JSON.stringify(record.email)} / ${JSON.stringify(record.name)}`,
+      );
+    }
+    console.log(`  identity confirmed at ${SPEAKING_TAB} row ${speakRow.row}`);
 
+    const blank = (c) => c.trim() === "";
+    const results = [];
+
+    // --- Approvals row: one cell at a time, each verified. ---
     if (needsApproval) {
-      await selectTab(APPROVALS_TAB);
-      await gotoCell(session, `A${appendRow}`);
-      for (const [, , value] of approvalCells(record)) {
-        if (value !== null) await session.type(String(value));
-        await session.press("Tab");
+      const cells = approvalCells(record)
+        .filter(([, , v]) => v !== null && String(v) !== "")
+        .map(([col, label, value]) => ({ col, label, value }));
+      cells.push({ col: "J", label: "Date Approved", value: today() });
+
+      // Every target must be empty before we touch anything.
+      for (const { col } of cells) {
+        const cur = await readCell(
+          session,
+          APPROVALS_TAB,
+          `${col}${appendRow}`,
+        );
+        if (!blank(cur)) {
+          throw new Error(
+            `Refusing to write: ${APPROVALS_TAB}!${col}${appendRow} is not ` +
+              `empty — it contains ${JSON.stringify(cur)}.\n` +
+              `Nothing has been written.`,
+          );
+        }
       }
-      await session.press("Enter");
-      await session.wait(800);
+      console.log(
+        `  all ${cells.length} target cells in row ${appendRow} confirmed empty`,
+      );
 
-      await gotoCell(session, `J${appendRow}`);
-      await session.type(today());
-      await session.press("Enter");
-      await session.wait(1200);
-      console.log(`\n  wrote ${APPROVALS_TAB} row ${appendRow}`);
+      for (const { col, label, value } of cells) {
+        const r = await writeCell(session, {
+          tab: APPROVALS_TAB,
+          ref: `${col}${appendRow}`,
+          value,
+          allow: blank,
+          allowDescription: "the cell must be empty",
+        });
+        results.push({
+          where: `${APPROVALS_TAB}!${col}${appendRow}`,
+          label,
+          ...r,
+        });
+        console.log(
+          `  ${r.ok ? "ok  " : "FAIL"} ${col}${appendRow} ${label} -> ${JSON.stringify(r.after)}`,
+        );
+        if (!r.ok) {
+          throw new Error(
+            `${col}${appendRow} did not verify (wrote ${JSON.stringify(String(value))}, ` +
+              `read back ${JSON.stringify(r.after)}). Stopping before any further cell.`,
+          );
+        }
+      }
     }
 
-    if (!alreadyTicked) {
-      await selectTab(SPEAKING_TAB);
-      await gotoCell(session, `${SPEAKING_COL}${speakRow.row}`);
-      await session.type("TRUE");
-      await session.press("Enter");
-      await session.wait(1200);
-      console.log(`  wrote ${SPEAKING_TAB} ${SPEAKING_COL}${speakRow.row}`);
+    // --- The Speaking checkbox. ---
+    if (alreadyTicked) {
+      console.log(
+        `  ${SPEAKING_COL}${speakRow.row} Speaking already TRUE — nothing to do`,
+      );
+    } else {
+      const r = await writeCell(session, {
+        tab: SPEAKING_TAB,
+        ref: `${SPEAKING_COL}${speakRow.row}`,
+        value: "TRUE",
+        allow: (c) => /^(TRUE|FALSE)$/i.test(c.trim()),
+        allowDescription:
+          "a checkbox cell must currently read exactly TRUE or FALSE",
+      });
+      results.push({
+        where: `${SPEAKING_TAB}!${SPEAKING_COL}${speakRow.row}`,
+        label: "Speaking",
+        ...r,
+      });
+      console.log(
+        `  ${r.ok ? "ok  " : "FAIL"} ${SPEAKING_COL}${speakRow.row} Speaking -> ${JSON.stringify(r.after)}`,
+      );
+      if (!r.ok) throw new Error(`Speaking checkbox did not verify.`);
     }
-  } finally {
-    session.close();
-  }
 
-  // --- Read back and verify. Cells, never the header row. ---
-  console.log(`\nVerifying by reading the cells back:`);
-  let failures = 0;
-
-  const tick = unquote(
-    parseCsv(
-      await gvizCsv(
-        target,
-        key,
-        SPEAKING_TAB,
-        `${SPEAKING_COL}${speakRow.row}:${SPEAKING_COL}${speakRow.row}`,
-      ),
-    )[0]?.[0],
-  );
-  const tickOk = tick.toUpperCase() === "TRUE";
-  if (!tickOk) failures += 1;
-  console.log(
-    `  ${tickOk ? "ok  " : "FAIL"} ${SPEAKING_COL}${speakRow.row} Speaking = ${JSON.stringify(tick)}`,
-  );
-
-  if (needsApproval) {
-    const back =
+    // --- Independent confirmation via gviz: a second, different path. ---
+    console.log(`\nIndependent read-back (gviz, addressed by tab name):`);
+    let failures = 0;
+    const tick = unquote(
       parseCsv(
         await gvizCsv(
           target,
           key,
-          APPROVALS_TAB,
-          `A${appendRow}:J${appendRow}`,
+          SPEAKING_TAB,
+          `${SPEAKING_COL}${speakRow.row}:${SPEAKING_COL}${speakRow.row}`,
         ),
-      )[0] ?? [];
-    const expected = approvalCells(record).map(([, , v]) =>
-      v === null ? "" : String(v),
+      )[0]?.[0],
     );
-    expected.push(""); // I, spacer
-    expected.push(today()); // J
-    for (let i = 0; i < expected.length; i++) {
-      const col = String.fromCharCode(65 + i);
-      const got = unquote(back[i]);
-      // Sheets may render a number or date differently than typed; compare loosely.
-      const ok =
-        got === expected[i] || Number(got) === Number(expected[i] || NaN);
-      if (!ok) failures += 1;
-      console.log(
-        `  ${ok ? "ok  " : "FAIL"} ${col}${appendRow} expected ${JSON.stringify(expected[i])}, got ${JSON.stringify(got)}`,
-      );
-    }
-  }
+    const tickOk = tick.toUpperCase() === "TRUE";
+    if (!tickOk) failures += 1;
+    console.log(
+      `  ${tickOk ? "ok  " : "FAIL"} ${SPEAKING_TAB}!${SPEAKING_COL}${speakRow.row} = ${JSON.stringify(tick)}`,
+    );
 
-  console.log(
-    failures === 0
-      ? `\nAll cells verified. Email/Slack Sent left unchecked — yours to do.`
-      : `\n${failures} cell(s) did NOT verify. Treat this write as FAILED and inspect the sheet.`,
-  );
-  if (failures > 0) process.exitCode = 1;
+    if (needsApproval) {
+      const back =
+        parseCsv(
+          await gvizCsv(
+            target,
+            key,
+            APPROVALS_TAB,
+            `A${appendRow}:J${appendRow}`,
+          ),
+        )[0] ?? [];
+      const want = approvalCells(record).map(([, , v]) =>
+        v === null ? "" : String(v),
+      );
+      want.push("", today());
+      for (let i = 0; i < want.length; i++) {
+        const col = String.fromCharCode(65 + i);
+        const got = unquote(back[i]);
+        const ok = got === want[i] || Number(got) === Number(want[i] || NaN);
+        if (!ok) failures += 1;
+        console.log(
+          `  ${ok ? "ok  " : "FAIL"} ${APPROVALS_TAB}!${col}${appendRow} expected ${JSON.stringify(want[i])}, got ${JSON.stringify(got)}`,
+        );
+      }
+    }
+
+    console.log(
+      failures === 0
+        ? `\nAll cells verified on both paths. Email/Slack Sent left unchecked — yours.`
+        : `\n${failures} cell(s) did NOT verify. Treat this write as FAILED and inspect the sheet.`,
+    );
+    if (failures > 0) process.exitCode = 1;
+  } finally {
+    session.close();
+  }
 };
 
 main().catch((err) => {

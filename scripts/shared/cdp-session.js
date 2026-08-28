@@ -160,11 +160,48 @@ export class CdpSession {
 }
 
 /**
- * Move the Sheets grid selection to a cell using the Name Box — the
- * cell-reference input left of the formula bar, `#t-name-box`. This avoids
- * clicking cells in the virtualised grid, where a cell may not exist in the DOM.
+ * Read the name of the currently active worksheet tab.
  */
-export const gotoCell = async (session, ref) => {
+export const getActiveTab = (session) =>
+  session.evaluate(`
+    (() => {
+      const el = document.querySelector(".docs-sheet-active-tab .docs-sheet-tab-name");
+      return el ? el.textContent.trim() : null;
+    })()
+  `);
+
+/** Read the Name Box, i.e. the reference the grid believes is selected. */
+export const getNameBox = (session) =>
+  session.evaluate(`document.querySelector("#t-name-box")?.value ?? null`);
+
+/**
+ * Read the selected cell's content from the formula bar.
+ *
+ * This matters more than it looks: it reads through the SAME path the
+ * keystrokes travel. A `gviz` pre-read addresses by tab name and so validates a
+ * different coordinate space than typing does — which is why it could not catch
+ * a worksheet mismatch.
+ */
+export const getFormulaBar = (session) =>
+  session.evaluate(`
+    (() => {
+      const el = document.querySelector("#t-formula-bar-input");
+      return el ? el.innerText.replace(/\u200b/g, "").trim() : null;
+    })()
+  `);
+
+/**
+ * Select a cell by a SHEET-QUALIFIED reference, then prove it worked.
+ *
+ * The incident of 2026-08-28: the worksheet was ambient state (whatever tab was
+ * selected) and only the cell was addressed. A synthetic click failed to switch
+ * tabs, so `A14` resolved against the wrong worksheet and overwrote a live
+ * record. The Name Box accepts `'Tab Name'!A14` and switches worksheets itself,
+ * which makes worksheet+cell one atomic address — and then we verify both.
+ *
+ * @throws if the active tab or the Name Box is not what was asked for.
+ */
+export const gotoCell = async (session, tab, ref) => {
   const focused = await session.evaluate(`
     (() => {
       const el = document.querySelector("#t-name-box");
@@ -176,10 +213,76 @@ export const gotoCell = async (session, ref) => {
   `);
   if (!focused) {
     throw new Error(
-      "Name Box (#t-name-box) not found — is this tab the Sheets editor?",
+      "Name Box (#t-name-box) not found — is this the Sheets editor?",
     );
   }
-  await session.type(ref);
+
+  await session.type(`'${tab}'!${ref}`);
   await session.press("Enter");
-  await session.wait(350);
+  await session.wait(600);
+
+  const [activeTab, nameBox] = await Promise.all([
+    getActiveTab(session),
+    getNameBox(session),
+  ]);
+  if (activeTab !== tab) {
+    throw new Error(
+      `Refusing to act: asked for worksheet ${JSON.stringify(tab)} but the ` +
+        `active tab is ${JSON.stringify(activeTab)}. Navigation did not take.`,
+    );
+  }
+  if ((nameBox ?? "").toUpperCase() !== ref.toUpperCase()) {
+    throw new Error(
+      `Refusing to act: asked for cell ${JSON.stringify(ref)} but the Name Box ` +
+        `shows ${JSON.stringify(nameBox)}.`,
+    );
+  }
+  return { tab: activeTab, ref: nameBox };
+};
+
+/** Navigate to a cell and read it, verifying the address first. */
+export const readCell = async (session, tab, ref) => {
+  await gotoCell(session, tab, ref);
+  return (await getFormulaBar(session)) ?? "";
+};
+
+/**
+ * Write one cell, with every guard the incident taught us.
+ *
+ * @param {object} opts
+ * @param {string} opts.tab worksheet name
+ * @param {string} opts.ref cell reference, e.g. "A14"
+ * @param {string|number} opts.value what to type
+ * @param {(current: string) => boolean} opts.allow must return true for the
+ *   cell's CURRENT content, or the write is refused. There is no default:
+ *   the caller has to state what it expects to find.
+ * @param {string} opts.allowDescription human text for the refusal message
+ */
+export const writeCell = async (
+  session,
+  { tab, ref, value, allow, allowDescription },
+) => {
+  if (typeof allow !== "function") {
+    throw new Error(
+      `writeCell(${tab}!${ref}): an "allow" predicate is required.`,
+    );
+  }
+
+  const before = await readCell(session, tab, ref);
+  if (!allow(before)) {
+    throw new Error(
+      `Refusing to write ${tab}!${ref}: it currently contains ` +
+        `${JSON.stringify(before)}, and the rule is ${allowDescription}.\n` +
+        `Never overwrite a cell whose content is not what was expected.`,
+    );
+  }
+
+  await session.type(String(value));
+  await session.press("Enter");
+  await session.wait(700);
+
+  // Re-address and read back — Enter moves the selection, so the cell must be
+  // re-selected rather than assumed.
+  const after = await readCell(session, tab, ref);
+  return { before, after, ok: after.trim() === String(value).trim() };
 };
