@@ -10,6 +10,7 @@
     "chrome:login": "node scripts/chrome.js --login",
     "chrome:status": "node scripts/chrome.js --status",
     "sheet:probe": "node scripts/sheet/probe.js",
+    "sheet:pending": "node scripts/sheet/pending.js",
     "lint": "eslint . --fix",
     "pretty": "prettier . --write",
     "format": "npm run lint && npm run pretty"

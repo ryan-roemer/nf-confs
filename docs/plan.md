@@ -25,21 +25,24 @@ to a person in Notion.
 
 ```
 scripts/
-  chrome.js            CLI: launch / status the dedicated Chrome     [BUILT]
+  chrome.js            CLI: launch / status / login the Chrome       [BUILT]
   shared/
-    cdp.js             connect, diagnostics, host guards             [BUILT]
-    state.js           local cache of what we've seen and done       [TODO]
+    cdp.js             connect, diagnostics, window heal, guards     [BUILT]
   sheet/
-    read.js            fetch the conference sheet as CSV             [TODO]
-    normalize.js       raw rows -> canonical event records           [TODO]
+    probe.js           exact per-tab gviz read -> .data/sheet/*.csv  [BUILT]
+    pending.js         Stage 1 triage + ask summary                  [BUILT]
+    lib/rows.js        CSV parse, date/cost/checkbox semantics        [BUILT]
+    write.js           append Approvals row, tick Speaking           [TODO]
   notion/
-    client.js          read the events hub, create/update pages      [TODO]
-    match.js           canonical record <-> existing page            [TODO]
-  sync.js              the pipeline: read, diff, plan, apply         [TODO]
-data/
-  events.json          snapshot of the last reconciled state         [TODO]
+    snapshot.js        dump the Events Calendar to .data/notion/     [TODO]
+    match.js           sheet record <-> existing page, by URL        [TODO]
+config/
+  targets.json         sheet key, Notion database + data source      [BUILT]
+.data/                 gitignored: emails, costs, leave              [BUILT]
 docs/
-  schema.md            the real sheet columns and Notion properties   [TODO]
+  workflow.md          the authority on field mappings               [BUILT]
+  schema.md            what both systems actually contain            [BUILT]
+  plan.md              this file
 ```
 
 Stages are separate files on purpose. Reading the sheet, deciding what's new,
@@ -59,43 +62,57 @@ https://docs.google.com/spreadsheets/d/<KEY>/gviz/tq?tqx=out:csv&sheet=<TAB>
 One authenticated request in page context, no API credentials, no OAuth app, no
 scraping the grid DOM. This is proven — it's how `aine-nf-data` reads its
 workbook headers. Note the endpoint is **read-only**; writing back to the sheet
-means driving the real UI, which is a much bigger commitment (see Q1).
+means driving the real UI — see below, where that is now verified working.
 
-### Writing to Notion — the fork worth deciding first
+### Writing to Notion — settled: the authorized connector
 
-**Option A: official Notion API with an internal integration token.**
-Create an internal integration in the Notion workspace settings, share the
-events hub database with it, put the token in `.env`. Then everything is a
-documented REST call: query the database with filters, create pages with typed
-properties, resolve people by user ID.
+Verified live on the Nearform workspace: `create_pages`, `update_page`,
+`get_users` and SQL `query_data_sources` all report available. These are real
+API calls with typed properties — a `people` property takes user IDs, a
+`multi_select` takes option names, a `date` takes a start/end range. No token to
+provision, no admin step, no UI automation.
 
-**Option B: drive the Notion web UI over CDP.**
-No token, no admin involvement — but every property edit becomes a click on a
-React surface with no stable selectors, relation pickers are modal typeaheads,
-and a Notion release can break it silently on a write path.
+Two consequences worth being explicit about:
 
-**Option C (new, and now the likely answer): the Notion connector already
-authorized in Claude sessions.** Verified live on the Nearform workspace —
-`create_pages`, `update_page`, `get_users` and SQL `query_data_sources` all
-report available, with no token and no admin step. The catch is real, though: a
-connector exists only while a Claude session is running it. It is not available
-to an unattended `node scripts/sync.js` on a cron. So Option C makes this a task
-you hand to Claude, not a script you run.
+- **A connector only exists while a Claude session is running it.** There is no
+  unattended `node scripts/sync.js` on a cron with this design. That suits a
+  workflow whose core step is Ryan deciding whether to fund something.
+- **If it ever must run unattended**, the upgrade is an internal Notion
+  integration token: same REST semantics, so the plan doesn't change shape.
 
-**Recommendation: A if this must run unattended, C if it doesn't.** Option B is the right call for reading Google
-Sheets because the CSV endpoint hands us a clean data format; there is no
-equivalent for Notion writes. Automating a UI to create records in a live team
-database trades a one-time admin ask for permanent brittleness on exactly the
-operation we least want to be brittle. Worth noting the Chrome launcher is not
-wasted either way — the sheet read needs it regardless.
+### Writing to Google Sheets — settled: drive the real UI over CDP
 
-If A is blocked (workspace policy, no admin rights), say so and we design B with
-dry-run-by-default and a hard row cap per run.
+`gviz` is read-only, so writes need the UI. **Verified working 2026-08-28** by a
+spike against a throwaway workbook (created, written, read back, trashed):
 
-Given the shape of the work — review a handful of new form rows, judge the
-ambiguous ones, assign speakers — a human-in-the-loop session fits it better
-than a cron job, and C costs nothing to start. A is the upgrade path if this ever
-needs to run on its own.
+The **Name Box** — the cell-reference input left of the formula bar — is a
+single stable input, `#t-name-box` (class `waffle-name-box`). That avoids ever
+clicking a cell in the virtualised grid:
+
+1. Focus `#t-name-box`, type the target reference (`A2`), press Enter. The grid
+   selection moves there.
+2. Type the value, press Tab to move right, repeat across the row.
+3. Press Enter to commit.
+
+The spike wrote a header row, a data row (`a.person@nearform.com`,
+`Come To Code`, `2026-09-26`, `160`) and a literal `FALSE` into a checkbox cell,
+then confirmed all of it through a `gviz` read-back.
+
+Why this is acceptable rather than merely expedient:
+
+- **The write surface is two operations, not general automation.** Append one
+  row of 7 cells to `2026 Approvals`, and set one checkbox in `Speaking Events`.
+  Both address cells by reference, which is exactly what the Name Box does.
+- **Every write is verifiable.** `gviz` reads the same cells straight back, so
+  the pipeline can confirm what landed instead of assuming. Any write step that
+  cannot read back its own result should fail.
+- **Nothing is overwritten blind.** The Approvals write appends to the first
+  empty row; the checkbox write targets one known cell.
+
+Caveat found in the same spike: the read-back showed the `Date` and `Total`
+_headers_ as empty, because gviz types a column from its data and drops a text
+header it cannot coerce. The values in the data row were correct. Verify writes
+by reading the **cells**, not the header row.
 
 ## Open questions
 
