@@ -23,6 +23,47 @@ re-doing. Those are the entries that actually improve the skill.
 
 ## Entries
 
+### 2026-08-28 — "processed" means `Speaking` is checked
+
+**Situation:** the queue was defined as `Email/Slack Sent` unchecked, which is
+Ryan's own downstream step. A fully-processed record therefore stayed in the
+queue until he did manual comms — which is what made "Alfonso has two
+unprocessed submissions" collide with three visible rows.
+
+I proposed deriving processed-ness from the work products (Approvals row, Notion
+page). **Ryan corrected the premise:** an event can need no leave and no budget,
+so it never gets an Approvals row yet still must be processed.
+
+**Decision (Ryan):** processed = **`Speaking` checked in `Speaking Events`**.
+That is where the workflow ends.
+**Rules:**
+
+1. Queue = speaking engagement with `Speaking` unchecked. `Email/Slack Sent`
+   drives nothing; it stays visible as information only.
+2. **`Speaking` is written LAST** — after Notion, after any Approvals row. The
+   model depends on it: set it earlier and a failed Notion write leaves a record
+   marked done that isn't.
+3. `needsBudget` follows **the ask** (`leave || travel || hotel`), not the
+   engagement variant. The old rule would have appended an Approvals row with no
+   money and no leave days for any plain `Speak…` entry that asked for nothing.
+
+**Accepted cost:** `Speaking` may be ticked early by someone categorising an
+entry, and the workflow would skip it silently. A miss, not corruption; runs are
+supervised. An audit of `Speaking`-TRUE rows against Notion would catch it if it
+becomes real.
+
+**Effect:** queue drops from 5 to **3** — Ticino, Come To Code, DevFest Roma.
+DevFest Campobasso and We Make Future are both `Speaking`-checked and correctly
+drop out. Note this removes the only `update`-path entry (We Make Future) from
+the work list, so that code path stays unexercised.
+
+Also: `needsBudget` fell from 78 to 41 of 98 speaking rows. 38 of the difference
+are plain `Speak…` entries with no ask, 20 of them 2024-era — those blanks
+probably mean the form did not yet ask, rather than a deliberate no. All are
+already done, so no operational impact, but do not read historical blanks as
+intent.
+**Status:** graduated.
+
 ### 2026-08-28 — money columns carry a currency format; type bare numbers
 
 **Situation:** Q2 has been open since the layout was mapped — the money columns

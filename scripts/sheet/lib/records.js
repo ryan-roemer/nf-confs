@@ -80,7 +80,15 @@ const toRecord = (form, fi, speak, si, index) => {
     name: g(form, fi[C.name]),
     engagement,
     isSpeaking: SPEAK_RE.test(engagement),
-    needsBudget: SPEAK_RE.test(engagement) && !NO_SUPPORT_RE.test(engagement),
+    // An Approvals row exists only when something was actually requested.
+    // Deriving this from the engagement variant instead would append a row
+    // with no money and no leave days for any plain "Speak…" submission that
+    // asks for nothing — a junk row in the Approved section.
+    needsBudget:
+      SPEAK_RE.test(engagement) &&
+      (isYes(g(form, fi[C.leave])) ||
+        isYes(g(form, fi[C.travel])) ||
+        isYes(g(form, fi[C.hotel]))),
     website: g(form, fi[C.website]),
     cfpLink: g(form, fi[C.cfp]),
     location: g(form, fi[C.location]),
@@ -109,24 +117,38 @@ const toRecord = (form, fi, speak, si, index) => {
 };
 
 /**
- * Why a record is or isn't in the queue. `Email/Slack Sent` is the only
- * processed marker — `Speaking` merely says "this is a speaking engagement" and
- * may be ticked early by someone else. See docs/workflow.md.
+ * Why a record is or isn't in the queue.
+ *
+ * **`Speaking` checked in `Speaking Events` is what "processed" means.** It is
+ * the workflow's terminal state, set last — after the Notion page exists and
+ * after the Approvals row, if there is one. Nothing else marks completion:
+ *
+ *  - An Approvals row cannot, because an event with no leave and no budget ask
+ *    never gets one, yet still has to be processed into Notion.
+ *  - `Email/Slack Sent` cannot, because that is Ryan's own downstream step. It
+ *    is informational here and drives nothing.
+ *
+ * The known cost: someone may tick `Speaking` early simply to categorise an
+ * entry as a speaking engagement, and the workflow would then skip it silently.
+ * That is a miss, not corruption, and runs are supervised. An audit
+ * cross-checking `Speaking`-TRUE rows against Notion would catch it if it ever
+ * starts happening.
  */
 export const triage = (r) => {
   if (!r.isSpeaking) {
     return { state: "skip", why: `not speaking: ${r.engagement}` };
   }
-  if (r.marks.emailSlackSent) {
-    return { state: "done", why: "Email/Slack Sent is checked" };
-  }
   if (r.marks.speaking) {
     return {
-      state: "part",
-      why: "Speaking checked but Email/Slack Sent not — may already be in Notion",
+      state: "done",
+      why:
+        "Speaking is checked — the workflow is finished with it" +
+        (r.marks.emailSlackSent
+          ? ""
+          : " (your Email/Slack Sent still pending)"),
     };
   }
-  return { state: "pending", why: "Email/Slack Sent unchecked" };
+  return { state: "pending", why: "Speaking is unchecked" };
 };
 
 /**
@@ -214,8 +236,6 @@ export const assertMirrorIntact = ({ records, mirrorOk }) => {
   }
 };
 
-/** The records this workflow acts on: speaking, not yet processed. */
+/** The records this workflow acts on: speaking, `Speaking` not yet checked. */
 export const queueOf = (records) =>
-  records.filter(
-    (r) => r.triage.state === "pending" || r.triage.state === "part",
-  );
+  records.filter((r) => r.triage.state === "pending");

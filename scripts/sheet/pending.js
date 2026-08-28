@@ -91,8 +91,11 @@ const main = async () => {
       `${records.filter((r) => r.isSpeaking && !r.needsBudget).length} without)`,
   );
   console.log(`  pending                ${count("pending")}`);
-  console.log(`  part-processed         ${count("part")}`);
-  console.log(`  done                   ${count("done")}`);
+  console.log(
+    `  done (Speaking ticked)  ${count("done")}` +
+      `   of which awaiting your Email/Slack Sent: ` +
+      `${records.filter((r) => r.triage.state === "done" && !r.marks.emailSlackSent).length}`,
+  );
   console.log(`  not speaking (skipped) ${count("skip")}`);
   console.log(
     `\nShowing ${show.length}. Use --all for every speaking row, --json for the full data.`,

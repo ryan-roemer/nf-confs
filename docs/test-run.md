@@ -29,25 +29,27 @@ the full context, so bring the report back and do the write there.
 As of **2026-08-28**, after the DevFest Campobasso trial. If these differ,
 either the sheet changed or something regressed — say which.
 
-| Check                    | Expected                                                     |
-| ------------------------ | ------------------------------------------------------------ |
-| `npm test`               | 8 pass, 0 fail                                               |
-| Form Responses data rows | 112                                                          |
-| Speaking engagements     | 98 (78 with a budget ask, 20 without)                        |
-| Triage                   | **3 pending · 2 part-processed** · 93 done · 14 not speaking |
-| Flags raised             | exactly 1 — row 110, travel requested but no estimate        |
-| Queue                    | rows 49, 110, 111, 112, 113                                  |
+| Check                    | Expected                                                                       |
+| ------------------------ | ------------------------------------------------------------------------------ |
+| `npm test`               | 8 pass, 0 fail                                                                 |
+| Form Responses data rows | 112                                                                            |
+| Speaking engagements     | 98 (41 with a budget ask, 57 without)                                          |
+| Triage                   | **3 pending** · 95 done (2 awaiting Ryan's Email/Slack Sent) · 14 not speaking |
+| Flags raised             | exactly 1 — row 110, travel requested but no estimate                          |
+| Queue                    | rows 110, 112, 113                                                             |
 
 ⚠️ Run `npm run sheet:probe -- --save` first. `.data/` is a snapshot, and a
 stale one will show a completed record as still pending.
 
-**Row 111 (DevFest Campobasso) is DONE** — Notion page created, Approvals row 14
-written, `Speaking` ticked. It shows as _part-processed_ because
-`Email/Slack Sent` is Ryan's manual step. Rerunning it should report
-`ALREADY RECORDED` and skip the append; if it tries to append a duplicate, that
-is a regression.
+**Row 111 (DevFest Campobasso) is DONE** and no longer appears in the queue —
+Notion page created, Approvals row 14 written, `Speaking` ticked. `Speaking` is
+what marks a record processed; `Email/Slack Sent` is Ryan's own later step and
+drives nothing. Rerunning Campobasso explicitly should report `ALREADY RECORDED`
+and skip the append; if it appends a duplicate, that is a regression.
 
-Remaining work, and what each exercises:
+Remaining work, and what each exercises. Note **We Make Future (row 49) is no
+longer queued** — its `Speaking` is checked — so the `update` path stays
+unexercised unless deliberately revisited:
 
 | Row | Event                       | Verdict  | Exercises                                                                          |
 | --- | --------------------------- | -------- | ---------------------------------------------------------------------------------- |

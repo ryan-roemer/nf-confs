@@ -32,7 +32,9 @@ value as input. Never convert a currency ourselves.
 
 ## Stage 2 — write the sheet
 
-5. 🤖 In `2026 Approvals`, fill `Email` · `Conf` · `Date` · `Travel` ·
+5. 🤖 **Only if something was actually requested** — `leave`, `travel` or
+   `hotel` is YES. An event that asks for nothing has no Approvals row at all,
+   whichever engagement variant was chosen. In `2026 Approvals`, fill `Email` · `Conf` · `Date` · `Travel` ·
    `Accomodations` · `Total` · `Leave Days`. **Leave `Actuals` empty** — that is
    Ryan's, for later.
 
@@ -97,22 +99,38 @@ Properties this workflow never touches: `Owner`, `Tags`, `Related / CFP`.
 Verified against the live sheet (112 data rows) and confirmed by Ryan
 2026-08-28.
 
-### `Email/Slack Sent` is the processed marker — `Speaking` is not
+### `Speaking` is the processed marker — `Email/Slack Sent` is not
 
-`Speaking` means **"this is a speaking engagement"** and may be ticked early, by
-someone other than Ryan. `Email/Slack Sent` is the only signal that Ryan has
-processed the entry.
+**"Processed" means `Speaking` is checked in `Speaking Events`.** That is the
+workflow's terminal state, and the only thing that removes an entry from the
+queue.
+
+**Queue = a speaking engagement whose `Speaking` is unchecked.**
+
+Why not the alternatives:
+
+- **Not an Approvals row.** An event with no leave and no budget ask never gets
+  one, yet still has to be processed into Notion. Absence would be ambiguous.
+- **Not `Email/Slack Sent`.** That is Ryan's own downstream step, done by hand
+  after the workflow finishes. It is informational here and drives nothing.
+- **Not the Notion page alone.** Correct in principle, but it makes the queue
+  unknowable without a Notion round-trip; `Speaking` is one local read.
+
+⚠️ **INVARIANT: `Speaking` is written LAST.** After the Notion page exists, and
+after the Approvals row if there is one. The entire model rests on this — set it
+before Notion succeeds and a record is marked done while not being done.
+
+Known cost, accepted: someone may tick `Speaking` early just to categorise an
+entry, and the workflow would then skip it silently. That is a miss rather than
+corruption, and runs are supervised. If it starts happening, an audit
+cross-checking `Speaking`-TRUE rows against Notion would catch it.
 
 | `Speaking` | `Email/Slack Sent` | rows | reading                                    |
 | ---------- | ------------------ | ---- | ------------------------------------------ |
-| TRUE       | TRUE               | 95   | done                                       |
-| FALSE      | TRUE               | 10   | done; all attend/sponsor/other engagements |
-| FALSE      | FALSE              | 5    | pending                                    |
-| TRUE       | FALSE              | 2    | pending, already flagged as speaking       |
-
-**So: the queue is `Email/Slack Sent` = FALSE.** The `Speaking` tick in Stage 2
-step 6 may therefore already be done when we get there — treat it as
-idempotent, not as an error.
+| TRUE       | TRUE               | 95   | done, and Ryan has sent his comms          |
+| TRUE       | FALSE              | 2    | **done** — Ryan's comms still pending      |
+| FALSE      | TRUE               | 10   | all attend/sponsor — not speaking, skipped |
+| FALSE      | FALSE              | 3    | **the queue**                              |
 
 ### Any `Speak*` value is a speaking engagement
 

@@ -41,7 +41,8 @@ Ryan. Do not proceed on stale `.data/`.
 npm run sheet:pending
 ```
 
-The queue is `Email/Slack Sent` = FALSE. Report it to Ryan as-is: the ask
+**The queue is a speaking engagement whose `Speaking` is unchecked.**
+`Email/Slack Sent` is Ryan's own later step and drives nothing here. Report it to Ryan as-is: the ask
 summary (leave / travel / hotel and the raw cost figures) is exactly what he
 needs to make the call. Surface every ⚠️ line; do not filter them.
 
@@ -166,7 +167,12 @@ around them.
 - Appends stop at the `In consideration` label (row 26). If the section fills,
   **ask Ryan to move it** — never move it yourself.
 - Money columns carry a currency format: **type bare numbers**, never `€`.
-- `without requesting support` entries skip the Approvals write entirely.
+- **An Approvals row exists only when something was requested** (`leave`,
+  `travel` or `hotel`). An event that asks for nothing gets no Approvals row at
+  all, whichever engagement variant was chosen — its only sheet output is the
+  `Speaking` tick.
+- **`Speaking` is written last**, after Notion and after any Approvals row. It
+  is the processed marker; nothing else is.
 
 ### If the browser is not ready
 
