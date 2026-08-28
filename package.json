@@ -1,0 +1,26 @@
+{
+  "name": "nf-confs",
+  "version": "0.0.1",
+  "description": "Conference speaking budget and approval tracking: Google Sheet in, Notion events hub out.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "chrome": "node scripts/chrome.js",
+    "chrome:run": "node scripts/chrome.js --run",
+    "chrome:login": "node scripts/chrome.js --login",
+    "chrome:status": "node scripts/chrome.js --status",
+    "sheet:probe": "node scripts/sheet/probe.js",
+    "lint": "eslint . --fix",
+    "pretty": "prettier . --write",
+    "format": "npm run lint && npm run pretty"
+  },
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@eslint/js": "^9.30.0",
+    "eslint": "^9.30.0",
+    "eslint-config-prettier": "^10.1.5",
+    "globals": "^15.14.0",
+    "playwright": "^1.59.1",
+    "prettier": "^3.6.2"
+  }
+}
