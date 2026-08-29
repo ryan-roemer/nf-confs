@@ -58,13 +58,11 @@ value as input. Never convert a currency ourselves.
    `Leave Days`, `Confs`, `Budget`) are Ryan's per-person rollup, **never
    written** by this workflow.
 
-   ⚠️ **`Date Approved` is stamped in UTC.** `write.js` computes it as
-   `new Date().toISOString().slice(0, 10)`, so a run after ~17:00 Pacific records
-   _tomorrow's_ date. Ryan accepted this once (2026-08-28, both of Alfonso's
-   entries stamped `2026-08-29`) rather than hold the writes. It is a known
-   divergence, not the intent — if it comes up again, switch to a local date.
-   The column itself is established practice: 20/20 records in `2025 Approvals`
-   have it filled.
+   **`Date Approved` is Ryan's local date**, built from local getters in
+   `write.js`. It was UTC until 2026-08-28, which meant a run after ~17:00
+   Pacific stamped _tomorrow's_ date; that happened twice in one day and was
+   fixed on the second. Never use `toISOString()` here. The column itself is
+   established practice: 20/20 records in `2025 Approvals` have it filled.
 
 6. 🤖 In `Speaking Events`, tick `Speaking`. **Leave `Email/Slack Sent`
    unchecked** — that stays Ryan's manual step.

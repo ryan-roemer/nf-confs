@@ -146,6 +146,15 @@ npm run sheet:write -- --event "<name>" --verify  # re-check an earlier write
 
 Show Ryan the dry run and get an explicit go-ahead before `--apply`.
 
+**`--backfill` when the record is already ticked.** Selection defaults to the
+queue, so a record whose `Speaking` is already TRUE cannot be named — the run
+exits with a hint rather than writing. That is correct for normal work: a ticked
+row is done. But Ryan sometimes processes an entry by hand and misses a piece of
+its sheet output, and then the Approvals row still has to be written. Add
+`--backfill` to widen the pool to already-done records. It changes only what can
+be selected — every guard still applies, and `Speaking` is reported as a no-op.
+Never reach for it to get past a refusal you don't understand.
+
 **Read [docs/decisions.md](../../../docs/decisions.md) before changing anything
 in this path.** On 2026-08-28 a write landed in the wrong worksheet and
 overwrote a live record. The guards below exist because of it — do not route

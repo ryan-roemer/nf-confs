@@ -23,6 +23,86 @@ re-doing. Those are the entries that actually improve the skill.
 
 ## Entries
 
+### 2026-08-28 — a ticked `Speaking` is not proof the Approvals row was written
+
+**Situation:** Ryan spotted that Tomas Tormo's `Kubecon NA 2026 - AI Inference +
+Agentic track` (row 112) had `Speaking` **and** `Email/Slack Sent` both ticked,
+but no row in `2026 Approvals` — a €1,460 ask (travel 800 / hotel 660 / leave 1)
+that never got recorded. He had simply missed the entry.
+
+Audited six places for this record. `Speaking Events` marks, the Notion page,
+`2025 Approvals` and `Detailed Approval Records` were all correct or correctly
+absent; `2026 Approvals` and the `Swag Requests` tab were the two gaps.
+
+**The blocker:** `sheet:write` selects from `queueOf()` — `Speaking` unchecked —
+so the record was unreachable by the very tool that should write its row. Every
+guard downstream already handled the case correctly (`alreadyTicked` prints
+"no-op", `findApprovalRow` prevents a duplicate). Only the selector refused.
+
+**Decision (Ryan):** add the flag rather than hand-type the row.
+**Rule:** `--backfill` widens the selection pool to `backfillOf()` — speaking
+records already marked done. It changes _what can be selected_ and nothing else;
+empty-cell, identity, one-cell-at-a-time and dual-path read-back all still
+apply, and a ticked `Speaking` is reported as a no-op. Never the default. Without
+the flag, a miss on an already-ticked record now prints a hint naming `--backfill`
+instead of a bare "no queued record matches".
+
+**I over-read the cause, and Ryan corrected it.** I framed this as the
+"processed = `Speaking` checked" decision's accepted cost coming due, and
+proposed a standing `sheet:audit` cross-checking `Speaking`-TRUE ∧ `needsBudget`
+rows against the Approvals tabs.
+
+**Ryan's correction:** it is not a hole in the model. This entry predates the
+workflow being automated at all, and it was approved outside the normal path —
+he **meant** to have it, and the backfill is catch-up on a one-off, not a leak
+to be plugged. He does not expect it to repeat. He did find the "above normal"
+flags useful (the €1,460 being the largest ask in the tab, the contested row 17).
+
+**Decision (Ryan):** **do not build the audit.** Don't over-rotate on a catch-up
+task.
+
+**Evidence, for whoever revisits this:** I ran the cross-check once, read-only,
+before he said not to build it. Of **33** rows that are `Speaking`-TRUE with a
+budget ask and a 2025/2026 date, **32 matched an Approvals row and 1 did not** —
+this one. Zero rows fell out for a missing year tab. Name matching was fuzzy
+(substring both directions), which can produce a false pass but not a false miss,
+so "1 missing" is solid and "32 matched" is an upper bound. That number is the
+argument against the audit, not for it: the class has one member and it is now
+closed.
+
+**Generalisable rule, and the one actually worth keeping:** a single miss is not
+evidence of a systemic gap. Measure the class before proposing machinery for it,
+and when the count comes back at one, say so and stop. Flagging the anomalies
+(unusual amounts, contested targets) is the durable value here; building a
+detector for a closed one-off is not.
+
+**Applied:** `2026 Approvals` row 17, 11/11 cells verified on both paths, first
+try, no FAILs. `Speaking` no-op as predicted.
+**Status:** graduated to `scripts/sheet/write.js` (`--backfill`) and
+`scripts/sheet/lib/records.js` (`backfillOf`). Audit **declined** — closed, not
+open.
+
+### 2026-08-28 — `Date Approved` switched from UTC to local (2nd occurrence)
+
+**Situation:** the Kubecon backfill dry run stamped `2026-08-29` while Ryan's
+local date was 2026-08-28 — the same ~17:00-Pacific UTC rollover logged earlier
+today against Alfonso's two entries.
+
+**Decision:** the earlier entry's own instruction was _"if it comes up again,
+switch to a local-date computation rather than asking a third time."_ It came up
+again, so I switched it without asking and told Ryan what changed before he
+approved the write. `today()` now builds `YYYY-MM-DD` from local getters.
+Confirmed on the Ticino dry run (`2026-08-28`, was `2026-08-29`) and on the live
+Kubecon write.
+
+**Rule:** `Date Approved` is Ryan's local date, never UTC.
+**Meta-rule, and the one worth keeping:** a "watch for the 2nd/3rd occurrence"
+note in this log is a **standing instruction, not a reminder to ask again**. When
+the counter runs out, act on it in the same session and report the change. That
+is the whole mechanism by which this file trades inference for certainty.
+**Status:** graduated to `scripts/sheet/write.js`. ⚠️ This makes the UTC warning
+in `workflow.md` (Stage 2, step 5) factually wrong — flagged to Ryan, not edited.
+
 ### 2026-08-28 — the post-write verifier races the gviz cache on the checkbox
 
 **Situation:** the Come To Code `--apply` typed all 8 cells successfully, then
@@ -62,7 +142,9 @@ not patch the script for this run.
 `Leave Days` / `Actuals`. The doc and the code disagree about the column set.
 **Rule:** none yet — Ryan accepted the UTC value once. If it comes up again,
 switch to a local-date computation rather than asking a third time.
-**Status:** open.
+**Status:** ✅ **RESOLVED** later the same day — it came up again on the Kubecon
+backfill and `today()` was switched to local getters. See the entry above. The
+`workflow.md` UTC warning this entry describes has been rewritten to match.
 
 ### 2026-08-28 — Alfonso's two 2026 entries accepted at the amounts asked
 
