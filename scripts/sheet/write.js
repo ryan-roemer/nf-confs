@@ -7,6 +7,12 @@
  *
  * Dry run is the default and prints the exact cells it would touch.
  *
+ * By default only the queue is selectable — a record whose `Speaking` is still
+ * unchecked. `--backfill` widens the pool to records already marked done, for
+ * the case where a processed row turns out to be missing its Approvals row.
+ * It changes *what can be selected* and nothing else: every guard below still
+ * applies, and a ticked `Speaking` is simply reported as a no-op.
+ *
  * Safety rules this enforces, each earned from a real failure:
  *
  *  - **Rows are resolved, never derived.** gviz collapses blank rows, so a
@@ -31,7 +37,12 @@ import {
   writeCell,
 } from "../shared/cdp-session.js";
 import { gvizCsv, pickTarget } from "../shared/cdp-eval.js";
-import { assertMirrorIntact, loadRecords, queueOf } from "./lib/records.js";
+import {
+  assertMirrorIntact,
+  backfillOf,
+  loadRecords,
+  queueOf,
+} from "./lib/records.js";
 import { parseCsv } from "./lib/rows.js";
 import {
   findApprovalRow,
@@ -86,7 +97,20 @@ const sameNumber = (a, b) => {
     na === nb
   );
 };
-const today = () => new Date().toISOString().slice(0, 10);
+/**
+ * Today's date in Ryan's local timezone, as `YYYY-MM-DD`.
+ *
+ * This used to be `toISOString().slice(0, 10)`, which is UTC — so any run after
+ * ~17:00 Pacific stamped `Date Approved` with *tomorrow's* date. It happened
+ * once on 2026-08-28 (accepted as-is) and again on the Kubecon backfill; the
+ * decision log's standing instruction was to switch on the second occurrence
+ * rather than ask a third time. Local it is.
+ */
+const today = () => {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
 
 /** The cells an Approvals row is made of. `null` means "tab past, write nothing". */
 const approvalCells = (record) => [
@@ -103,6 +127,7 @@ const approvalCells = (record) => [
 const main = async () => {
   const wanted = argValue("--event");
   const apply = hasFlag("--apply");
+  const backfill = hasFlag("--backfill");
   if (!wanted) {
     console.error(
       'Which record? e.g.\n  npm run sheet:write -- --event "DevFest Campobasso"',
@@ -118,20 +143,41 @@ const main = async () => {
   for (const w of loaded.warnings) console.warn(`Warning: ${w}\n`);
   assertMirrorIntact(loaded);
 
-  const matches = queueOf(loaded.records).filter((r) =>
+  // The default pool is the queue. `--backfill` selects from records the
+  // workflow already finished — the only way to reach a row whose `Speaking`
+  // is ticked but whose Approvals row was never written.
+  const pool = backfill ? backfillOf(loaded.records) : queueOf(loaded.records);
+  const noun = backfill ? "already-processed" : "queued";
+  const matches = pool.filter((r) =>
     r.name.toLowerCase().includes(wanted.toLowerCase()),
   );
   if (matches.length !== 1) {
+    const hint =
+      matches.length === 0 &&
+      !backfill &&
+      backfillOf(loaded.records).some((r) =>
+        r.name.toLowerCase().includes(wanted.toLowerCase()),
+      )
+        ? `\nIts \`Speaking\` is already ticked, so it is not in the queue. ` +
+          `If a piece of its sheet output was missed, add --backfill.`
+        : "";
     console.error(
-      matches.length === 0
-        ? `No queued record matches ${JSON.stringify(wanted)}.`
-        : `${matches.length} queued records match ${JSON.stringify(wanted)}: ` +
-            `${matches.map((m) => m.name).join(", ")}. Be more specific.`,
+      (matches.length === 0
+        ? `No ${noun} record matches ${JSON.stringify(wanted)}.`
+        : `${matches.length} ${noun} records match ${JSON.stringify(wanted)}: ` +
+          `${matches.map((m) => m.name).join(", ")}. Be more specific.`) + hint,
     );
     process.exitCode = 1;
     return;
   }
   const record = matches[0];
+
+  if (backfill) {
+    console.log(
+      `BACKFILL — this record is already processed (${record.triage.why}).\n` +
+        `Filling in sheet output that was missed. Every guard still applies.\n`,
+    );
+  }
 
   const target = await pickTarget(GOOGLE);
 

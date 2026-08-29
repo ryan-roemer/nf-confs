@@ -239,3 +239,15 @@ export const assertMirrorIntact = ({ records, mirrorOk }) => {
 /** The records this workflow acts on: speaking, `Speaking` not yet checked. */
 export const queueOf = (records) =>
   records.filter((r) => r.triage.state === "pending");
+
+/**
+ * Records the workflow has already finished with: speaking, `Speaking` ticked.
+ *
+ * This is the backfill pool — a record that was processed but had a piece of
+ * its sheet output missed. It exists because `Speaking` is written last, so a
+ * ticked row is not proof that the Approvals row beside it was ever written.
+ * Selecting from here is deliberate and must never be the default; the write
+ * path's real guards (empty-cell, `ALREADY RECORDED`, read-back) still apply.
+ */
+export const backfillOf = (records) =>
+  records.filter((r) => r.triage.state === "done");
