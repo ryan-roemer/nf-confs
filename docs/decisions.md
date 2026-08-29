@@ -23,6 +23,68 @@ re-doing. Those are the entries that actually improve the skill.
 
 ## Entries
 
+### 2026-08-28 — the post-write verifier races the gviz cache on the checkbox
+
+**Situation:** the Come To Code `--apply` typed all 8 cells successfully, then
+its own independent read-back reported `FAIL Speaking Events!L115 = "FALSE"`
+and told me to treat the write as failed. The ten `2026 Approvals` cells in the
+**same** read-back pass all verified. A `--verify` rerun seconds later returned
+`ok Speaking Events!L115 = "TRUE"` — 11/11.
+
+**Diagnosis:** not a bad write. The gviz endpoint had not yet propagated the
+checkbox toggle when the read-back fired. The Approvals cells were typed first
+and had a head start; `Speaking` is written last by design, so it is always the
+freshest cell and always the one most likely to be read stale.
+
+**Why it matters:** this is the verifier crying wolf a second time (the first was
+`€`-formatted money, already fixed). A false FAIL on the _processed marker_
+specifically is the expensive one — it invites a rerun or a manual "fix" of a
+cell that was already correct.
+
+**Rule:** a failing read-back on `Speaking` alone, where every Approvals cell
+passed, means **re-verify before believing it**. Never re-type the checkbox on
+the strength of one failed read. Candidate fix: have the verifier retry the
+`Speaking` cell once after a short delay before declaring FAIL.
+**Status:** open — 1st occurrence, no code change made.
+
+### 2026-08-28 — `Date Approved` is stamped in UTC, not local
+
+**Situation:** the dry runs for both of Alfonso's entries showed
+`J  Date Approved  "2026-08-29"` while Ryan's local date was 2026-08-28. The
+write ran at ~17:00 PDT, and `write.js:89` computes the value as
+`new Date().toISOString().slice(0, 10)` — UTC, which had already rolled over.
+Every approval written after ~17:00 Pacific gets tomorrow's date.
+
+**Decision (Ryan):** apply as-is with 2026-08-29; do not hold the writes and do
+not patch the script for this run.
+**Also noted:** `Date Approved` (column J) is written by the script but does
+**not** appear in the `workflow.md` Approvals mapping table, which stops at
+`Leave Days` / `Actuals`. The doc and the code disagree about the column set.
+**Rule:** none yet — Ryan accepted the UTC value once. If it comes up again,
+switch to a local-date computation rather than asking a third time.
+**Status:** open.
+
+### 2026-08-28 — Alfonso's two 2026 entries accepted at the amounts asked
+
+**Situation:** rows 112 (Come To Code, 2026-09-26→27, Pignola) and 113 (DevFest
+Roma, 2026-10-10) — both `alfonso.graziano@nearform.com`, both submitted
+26/08/2026, both leave=no. Come To Code asks travel 60 / hotel 100 / total 160;
+DevFest Roma asks travel 100 / hotel 170 / total 270. Every figure is a bare
+number — the form captures no currency symbol.
+
+I flagged two things rather than deciding them: (a) the missing currency, and
+(b) DevFest Roma being a **1-day** event asking 170 of accommodation with 3h
+travel each way — inside the "up to 2 nights, use common sense" wording, but the
+one figure worth a second look.
+
+**Decision (Ryan):** process **both**, at the amounts asked, figures read as
+**EUR**.
+**Rule:** one-off on the amounts. On currency: the form has no currency field, so
+bare numbers on an EU-located event are not self-evidently EUR and the workflow
+must keep surfacing it — but this is the 1st time it has been asked. Watch for
+the 3rd.
+**Status:** open.
+
 ### 2026-08-28 — "processed" means `Speaking` is checked
 
 **Situation:** the queue was defined as `Email/Slack Sent` unchecked, which is

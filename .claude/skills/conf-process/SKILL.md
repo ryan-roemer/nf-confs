@@ -174,6 +174,27 @@ around them.
 - **`Speaking` is written last**, after Notion and after any Approvals row. It
   is the processed marker; nothing else is.
 
+### If the read-back fails
+
+`--apply` finishes with an independent `gviz` read-back. It has now been wrong
+twice, in both directions of noise, so read a FAIL before acting on it:
+
+- **`Speaking` alone failed and every Approvals cell passed → re-verify before
+  believing it.** Run `--verify` and trust the second read. `Speaking` is written
+  last, so it is the freshest cell and the one `gviz` is likeliest to serve
+  stale; a genuinely bad write does not land ten neighbouring cells correctly and
+  miss only the checkbox. Seen 2026-08-28 on Come To Code — `L115` read `FALSE`
+  seconds after a successful type, then `TRUE` on re-verify, 11/11.
+- **Never re-type a cell on the strength of one failed read.** Re-typing the
+  checkbox is how a false FAIL turns into a real edit against a live sheet.
+- **A broad failure is real.** Several cells failing, or an Approvals cell
+  disagreeing on content rather than formatting, is a genuine failure: stop,
+  report the output verbatim, and hand it to Ryan.
+
+Report the FAIL and the re-verify to Ryan either way — never quietly swallow a
+failed check because the retry passed. Log any new failure mode in
+[docs/decisions.md](../../../docs/decisions.md).
+
 ### If the browser is not ready
 
 Preconditions **flag and stop** — signed out, wrong workbook, editor not loaded.

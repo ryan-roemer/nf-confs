@@ -35,19 +35,36 @@ value as input. Never convert a currency ourselves.
 5. 🤖 **Only if something was actually requested** — `leave`, `travel` or
    `hotel` is YES. An event that asks for nothing has no Approvals row at all,
    whichever engagement variant was chosen. In `2026 Approvals`, fill `Email` · `Conf` · `Date` · `Travel` ·
-   `Accomodations` · `Total` · `Leave Days`. **Leave `Actuals` empty** — that is
-   Ryan's, for later.
+   `Accomodations` · `Total` · `Leave Days` · `Date Approved`. **Leave `Actuals`
+   empty** — that is Ryan's, for later.
 
-   | Approvals column | Source                                                 |
-   | ---------------- | ------------------------------------------------------ |
-   | `Email`          | `Form Responses 1` → `Email Address`                   |
-   | `Conf`           | `Form Responses 1` → `Name of the Event or Conference` |
-   | `Date`           | `Form Responses 1` → `Event start date`                |
-   | `Travel`         | travel estimate, in EUR                                |
-   | `Accomodations`  | hotel estimate, in EUR                                 |
-   | `Total`          | travel + accommodations                                |
-   | `Leave Days`     | from the leave request                                 |
-   | `Actuals`        | **never written**                                      |
+   The table below is the **complete** set of columns this workflow writes. A
+   column the script writes must appear here; if the two disagree, that is a bug
+   in one of them, not a licence to infer.
+
+   | Approvals column | Col | Source                                                 |
+   | ---------------- | --- | ------------------------------------------------------ |
+   | `Email`          | A   | `Form Responses 1` → `Email Address`                   |
+   | `Conf`           | B   | `Form Responses 1` → `Name of the Event or Conference` |
+   | `Date`           | C   | `Form Responses 1` → `Event start date`                |
+   | `Travel`         | D   | travel estimate, in EUR                                |
+   | `Accomodations`  | E   | hotel estimate, in EUR                                 |
+   | `Total`          | F   | travel + accommodations                                |
+   | `Actuals`        | G   | **never written**                                      |
+   | `Leave Days`     | H   | from the leave request                                 |
+   | `Date Approved`  | J   | the date the workflow ran — see below                  |
+
+   Column `I` is a spacer and is left empty. Columns `L`–`O` (`Name`,
+   `Leave Days`, `Confs`, `Budget`) are Ryan's per-person rollup, **never
+   written** by this workflow.
+
+   ⚠️ **`Date Approved` is stamped in UTC.** `write.js` computes it as
+   `new Date().toISOString().slice(0, 10)`, so a run after ~17:00 Pacific records
+   _tomorrow's_ date. Ryan accepted this once (2026-08-28, both of Alfonso's
+   entries stamped `2026-08-29`) rather than hold the writes. It is a known
+   divergence, not the intent — if it comes up again, switch to a local date.
+   The column itself is established practice: 20/20 records in `2025 Approvals`
+   have it filled.
 
 6. 🤖 In `Speaking Events`, tick `Speaking`. **Leave `Email/Slack Sent`
    unchecked** — that stays Ryan's manual step.
