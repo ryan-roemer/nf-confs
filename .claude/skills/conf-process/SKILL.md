@@ -195,6 +195,13 @@ around them.
   `travel` or `hotel`). An event that asks for nothing gets no Approvals row at
   all, whichever engagement variant was chosen — its only sheet output is the
   `Speaking` tick.
+- **`--leave-days N` when Ryan says leave was taken and the form doesn't know.**
+  The form asks leave yes/no, so a speaker who answered "no" and then took event
+  leave is invisible to every column here. That number is his to supply, like a
+  EUR conversion — never infer it. It forces an Approvals row when `needsBudget`
+  is false and sets **only** `Leave Days`; money columns stay blank. The run
+  prints the override beside what the form said, so show him that before
+  `--apply`. Pair it with `--backfill` if the record is already processed.
 - **`Speaking` is written last**, after Notion and after any Approvals row. It
   is the processed marker; nothing else is.
 

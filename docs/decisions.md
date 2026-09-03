@@ -23,6 +23,46 @@ re-doing. Those are the entries that actually improve the skill.
 
 ## Entries
 
+### 2026-09-03 — `--leave-days`: recording leave the form never captured
+
+**Situation:** Adam Barrett's Saskatchewan Startup Summit submission answered
+"without requesting support or swag" with leave/travel/hotel all **no**, and was
+already fully processed. Ryan then said Adam is taking **1 day of event leave**
+and wanted it in `2026 Approvals` — with the original submission left exactly as
+it stands.
+
+**The gap:** `needsBudget` reads the three ask columns, all of which say no, so
+the Approvals block was unreachable. The new fact exists nowhere in the sheet.
+
+**Decision:** follow the `--backfill` precedent from earlier today — **add the
+flag rather than hand-type the row**. Hand-typing would bypass the empty-cell
+check, the identity check, one-cell-at-a-time writing, the label boundary, the
+idempotency check and the dual read-back, which is exactly the class of thing
+the 2026-08-28 incident produced.
+
+**Rule:** `--leave-days N` is Ryan supplying a fact the form cannot carry, the
+same shape as him supplying a EUR conversion. It forces an Approvals row when
+`needsBudget` is false, and **only** the leave count — it never invents money.
+`--leave-days 0` is not a request and conjures nothing. The override is printed
+next to what the form actually said, so it can never be applied quietly.
+
+**Second time "add the flag, don't hand-type" has been the answer** (after
+`--backfill`). One more and it should be written into `workflow.md` as the
+standing rule for this path rather than decided case by case.
+
+**Bug found on the way, and it would have shipped a wrong number:**
+`approvalCells` computed `Total` from `ask.total`, which is **0** — not null —
+when nothing was requested. The write filter keeps `0`, so a leave-only row
+would have typed `0` into the currency-formatted `Total` column and rendered
+**€0**. Every hand-written leave-only row in the tab (Alfonso's `Jsday`,
+`CloudConf`) leaves Travel/Accomodations/Total blank. It never fired before
+because every script-written row so far carried both travel and hotel. Fixed:
+no cost on either side means Total is blank.
+
+**Applied:** `2026 Approvals` row 18, 11/11 cells verified on both paths, first
+try, no FAILs. Rerun reports `ALREADY RECORDED`. `Speaking` no-op as expected.
+**Status:** graduated to `scripts/sheet/write.js` (`--leave-days`, `Total` fix).
+
 ### 2026-09-03 — the guest account is a migration, not an alternative (refines the entry below)
 
 **Situation:** I had written the two-domain rule as "some people also have a

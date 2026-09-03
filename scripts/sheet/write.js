@@ -13,6 +13,11 @@
  * It changes *what can be selected* and nothing else: every guard below still
  * applies, and a ticked `Speaking` is simply reported as a no-op.
  *
+ * `--leave-days N` records event leave the form does not carry — the form asks
+ * leave yes/no, so a speaker who answered "no" and then took leave is invisible
+ * to it. Ryan supplies that number; it is the only way to force an Approvals
+ * row for a record whose `needsBudget` is false, and it never invents money.
+ *
  * Safety rules this enforces, each earned from a real failure:
  *
  *  - **Rows are resolved, never derived.** gviz collapses blank rows, so a
@@ -112,17 +117,32 @@ const today = () => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
 
-/** The cells an Approvals row is made of. `null` means "tab past, write nothing". */
-const approvalCells = (record) => [
-  ["A", "Email", record.email],
-  ["B", "Conf", record.name],
-  ["C", "Date", record.date.iso],
-  ["D", "Travel", record.ask.travelCost.amount ?? ""],
-  ["E", "Accomodations", record.ask.hotelCost.amount ?? ""],
-  ["F", "Total", record.ask.total ?? ""],
-  ["G", "Actuals", null],
-  ["H", "Leave Days", record.ask.leave ? 1 : ""],
-];
+/**
+ * The cells an Approvals row is made of. `null` means "tab past, write nothing".
+ *
+ * @param {object} record
+ * @param {number|null} leaveDays Ryan's `--leave-days` override, or null to use
+ *   what the form says. The form only asks leave yes/no, so a day count that
+ *   differs from the submission can only come from him.
+ */
+const approvalCells = (record, leaveDays = null) => {
+  // No cost on either side means there is nothing to total. `ask.total` is 0
+  // rather than null in that case, and typing 0 into a currency column renders
+  // "€0" — which is not what a leave-only row looks like. Every hand-written
+  // leave-only row in the tab leaves Travel, Accomodations and Total blank.
+  const noCosts =
+    record.ask.travelCost.amount == null && record.ask.hotelCost.amount == null;
+  return [
+    ["A", "Email", record.email],
+    ["B", "Conf", record.name],
+    ["C", "Date", record.date.iso],
+    ["D", "Travel", record.ask.travelCost.amount ?? ""],
+    ["E", "Accomodations", record.ask.hotelCost.amount ?? ""],
+    ["F", "Total", noCosts ? "" : (record.ask.total ?? "")],
+    ["G", "Actuals", null],
+    ["H", "Leave Days", leaveDays ?? (record.ask.leave ? 1 : "")],
+  ];
+};
 
 const main = async () => {
   const wanted = argValue("--event");
@@ -134,6 +154,27 @@ const main = async () => {
     );
     process.exitCode = 1;
     return;
+  }
+
+  // `--leave-days N` — Ryan supplying a fact the form does not carry.
+  //
+  // The form asks leave yes/no, so a speaker who answered "no" and then took
+  // event leave anyway is invisible to every column this script reads. That
+  // number is his to supply, exactly as he supplies a EUR conversion, and it
+  // is the only thing that can force an Approvals row for a record whose
+  // `needsBudget` is false. It never invents money: Travel, Accomodations and
+  // Total stay blank unless the form carried costs.
+  const rawLeave = argValue("--leave-days");
+  let leaveDays = null;
+  if (rawLeave !== null) {
+    leaveDays = Number(rawLeave);
+    if (!Number.isInteger(leaveDays) || leaveDays < 0) {
+      console.error(
+        `--leave-days must be a whole number of days, got ${JSON.stringify(rawLeave)}.`,
+      );
+      process.exitCode = 1;
+      return;
+    }
   }
 
   const cfg = JSON.parse(await readFile("config/targets.json", "utf8"));
@@ -204,7 +245,8 @@ const main = async () => {
   const alreadyTicked = current.toUpperCase() === "TRUE";
 
   // --- Where does the Approvals row go? ---
-  const needsApproval = record.needsBudget;
+  // An override of 0 days is not a request — it must not conjure a row.
+  const needsApproval = record.needsBudget || (leaveDays ?? 0) > 0;
   let appendRow = null;
   let alreadyRecorded = null;
   if (needsApproval) {
@@ -267,13 +309,26 @@ const main = async () => {
         `nothing to approve.`,
     );
   } else {
+    // An override contradicting the submission is the one thing here that is
+    // not derivable from the sheet, so it is stated next to what the form
+    // actually said. It must never be possible to apply this quietly.
+    if (leaveDays !== null) {
+      console.log(
+        `\n  OVERRIDE — leave days supplied by you: ${leaveDays}\n` +
+          `    the form said leave=${record.ask.leave ? "YES" : "no"}` +
+          (record.needsBudget
+            ? ""
+            : `, and nothing else was requested, so this override is the ` +
+              `only reason there is an Approvals row at all`),
+      );
+    }
     console.log(
       `\n  ${APPROVALS_TAB}, row ${appendRow}:` +
         (alreadyRecorded !== null
           ? "   ALREADY RECORDED — append skipped"
           : ""),
     );
-    for (const [col, label, value] of approvalCells(record)) {
+    for (const [col, label, value] of approvalCells(record, leaveDays)) {
       console.log(
         value === null
           ? `    ${col}${appendRow}  ${label.padEnd(14)} — NOT WRITTEN (yours)`
@@ -373,7 +428,7 @@ const main = async () => {
 
       // --- Approvals row: one cell at a time, each verified. ---
       if (needsApproval && alreadyRecorded === null) {
-        const cells = approvalCells(record)
+        const cells = approvalCells(record, leaveDays)
           .filter(([, , v]) => v !== null && String(v) !== "")
           .map(([col, label, value]) => ({ col, label, value }));
         cells.push({ col: "J", label: "Date Approved", value: today() });
@@ -480,7 +535,7 @@ const main = async () => {
           `A${appendRow}:J${appendRow}`,
         ),
       )[0] ?? [];
-    const want = approvalCells(record).map(([, , v]) =>
+    const want = approvalCells(record, leaveDays).map(([, , v]) =>
       v === null ? "" : String(v),
     );
     want.push("", today());
