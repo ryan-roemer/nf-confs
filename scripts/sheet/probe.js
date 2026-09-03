@@ -246,6 +246,11 @@ const main = async () => {
     if (failures.length > 0) process.exitCode = 1;
   } finally {
     await page.close();
+    // Playwright's connectOverCDP holds the Node event loop open until the
+    // connection is dropped, so without this the run writes every CSV and then
+    // hangs forever rather than exiting. Over CDP this disconnects the client;
+    // it does not close Ryan's Chrome or any tab he has open.
+    await browser.close();
   }
 };
 

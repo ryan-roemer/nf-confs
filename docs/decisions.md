@@ -23,6 +23,114 @@ re-doing. Those are the entries that actually improve the skill.
 
 ## Entries
 
+### 2026-09-03 — the guest account is a migration, not an alternative (refines the entry below)
+
+**Situation:** I had written the two-domain rule as "some people also have a
+guest account". Ryan corrected the framing.
+
+**Ryan:** many `@nearform.com` real users have been **deactivated in favour of**
+a `@thenearformway.com` guest user, usually under the same name.
+
+**Why the distinction matters:** it inverts the default. Under "alternative", a
+miss on `@nearform.com` is an anomaly worth surfacing; under "migration", it is
+the expected path for a growing share of speakers and surfacing it is noise. The
+entry below treated my empty first lookup as a finding and cost Ryan two rounds
+of correction — that is the cost of the weaker framing, and the reason this one
+is recorded separately rather than folded into it.
+
+**Rule:** expect the guest lookup to be the one that resolves. Report a
+first-lookup miss as routine, not as a problem.
+**Status:** graduated to `workflow.md` and `SKILL.md`.
+
+**Tune-ups applied the same day**, all three at Ryan's request:
+
+1. **`probe.js` never exited.** `connectToChrome` (Playwright `connectOverCDP`)
+   holds the Node event loop open; the `finally` closed only the page. Every run
+   wrote all six CSVs and then hung — it cost two timeouts and a killed job in
+   one session, and made a working script look broken. Now disconnects the
+   browser too. Over CDP that drops the client and leaves Ryan's Chrome alone,
+   confirmed by reconnecting afterwards.
+2. **The Approvals-skip line named the wrong reason.** It printed
+   `skipped — "without requesting support or swag"`, but `needsBudget` reads the
+   three ask columns, not the engagement variant. A plain `Speak at an event
+representing Nearform` row asking for nothing would have been reported under
+   a variant it isn't. Now states the fact the decision was made on: leave,
+   travel and hotel all "no".
+3. **`CdpSession.activate()`**, called first thing in the write path. Fronts the
+   workbook tab so a throttled background tab cannot make `gotoCell` miss its
+   wait. **Advisory, never fatal** — it prints a note if it cannot confirm, and
+   the worksheet guard remains the thing that actually protects the write. The
+   600 ms wait in `gotoCell` is deliberately untouched.
+
+### 2026-09-03 — speakers have a second email domain, and guests are invisible to `get_users`
+
+**Situation:** Saskatchewan Startup Summit (row 114 / sheet row 117),
+adam.barrett@nearform.com. `get_users` returned **nothing** for that email, for
+`Barrett`, for `adam.barrett`, and for the user id on his own 2025 Prairie Dev
+Con page. A control lookup (Antonio Perrone, same call, by id) resolved fine, so
+the call itself was working.
+
+**I drew the wrong conclusion and said so out loud:** I reported the account as
+**deactivated**. It is not.
+
+**Ryan's correction:** people have a second Notion identity,
+`FIRST.LAST@thenearformway.com`, and those are **guest** accounts. Adam has one.
+`get_users` does not return guests — not by email, not by surname, not by id. So
+an empty result is not evidence of absence, and I should have said "cannot see"
+rather than "does not exist".
+
+**Decision (Ryan):** check `FIRST.LAST@nearform.com` first, then
+`FIRST.LAST@thenearformway.com`. He also asked whether the Notion **web** UI
+could do the name matching, since the dropdown shows guests.
+
+**Rule:** two-domain lookup, and when the id belongs to a guest, name it with a
+live read — render a page that already carries it in the conference Chrome and
+read the `Who` chip. Confirmed here twice: Prairie Dev Con rendered
+`Who → Adam Barrett`, tying `143d872b-594c-814f-8e67-000217353431` to a human,
+and the new page rendered the same name after the write. That is the only name
+match available for a guest; Ryan confirms before writing one you could not name.
+
+**Generalisable, and the part worth keeping:** a tool that cannot see a class of
+records must not be read as proof that the record is missing. `get_users`
+abstains on guests, and abstention is not a zero — the same rule CLAUDE.md
+already states for counted evidence, applied to identity lookups.
+
+**Applied:** page created, all 13 properties verified on read-back, exactly one
+page (no duplicate from the failed first attempt). `Speaking` L117 TRUE,
+verified on both paths. No Approvals row — nothing was requested.
+**Status:** graduated to `workflow.md` ("`Who`: two email domains") and
+`SKILL.md` step 5.
+
+### 2026-09-03 — the worksheet guard fires when the Sheets tab is backgrounded
+
+**Situation:** the first `--apply` on Saskatchewan Startup Summit refused:
+`asked for worksheet "Speaking Events" but the active tab is "Form Responses 1".
+Navigation did not take.` Nothing was written.
+
+**Cause:** mine. I had driven the **Notion** tab in the same Chrome window to do
+the guest name match, which left the Sheets tab in the background. Sheets
+throttles a backgrounded tab, so the Name Box navigation did not complete inside
+`gotoCell`'s 600 ms wait, and the guard correctly refused.
+
+**Fix, and what not to do:** activate the spreadsheet tab first —
+`curl -s http://127.0.0.1:9333/json/activate/<targetId>` — then rerun. The
+retry wrote first try, no FAILs, verified on both paths. **Do not lengthen the
+600 ms wait to make this go away**; the guard is the 2026-08-28
+wrong-worksheet protection and the timeout is what makes it bite.
+
+**Rule:** if this workflow drives any other tab in the conference Chrome, bring
+the workbook tab back to the front before a sheet write. A retry after a
+navigation refusal is safe by construction — the guard refuses rather than
+writing — but it is still a refusal to report, not to skip past.
+**Status:** open — worth a precondition in `write.js` that activates the
+workbook target before `gotoCell`, if it recurs.
+
+**Also seen, minor:** `notion-create-pages` rejected
+`"date:Date:is_datetime": "0"` (string) with a 400 and the message
+`wrote 0 instead of "0"`. It reads like a coercion notice but it is a hard
+rejection — pass the bare number `0`. I confirmed no page was created before
+retrying, rather than trusting the wording.
+
 ### 2026-08-28 — a ticked `Speaking` is not proof the Approvals row was written
 
 **Situation:** Ryan spotted that Tomas Tormo's `Kubecon NA 2026 - AI Inference +

@@ -150,6 +150,32 @@ export class CdpSession {
     await new Promise((r) => setTimeout(r, ms));
   }
 
+  /**
+   * Bring this tab to the front, and report whether it took.
+   *
+   * Chrome throttles a backgrounded tab, and Sheets is heavy enough that the
+   * worksheet switch in `gotoCell` can then miss its wait and leave the old tab
+   * active — which trips the worksheet guard and refuses a write that was
+   * otherwise correct. Seen 2026-09-03, after this workflow drove a Notion tab
+   * in the same window to name a guest user.
+   *
+   * Best-effort by design: failing to front the tab is not itself a reason to
+   * refuse. The guard downstream is what actually protects the write.
+   *
+   * @returns {Promise<boolean>} true when the tab reports itself visible.
+   */
+  async activate() {
+    try {
+      await this.send("Page.bringToFront", {}, 5000);
+    } catch {
+      return false;
+    }
+    await this.wait(500);
+    return (
+      (await this.evaluate(`document.visibilityState === "visible"`)) === true
+    );
+  }
+
   close() {
     try {
       this.#ws.close();

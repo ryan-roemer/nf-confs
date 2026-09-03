@@ -258,8 +258,12 @@ const main = async () => {
   console.log(`    M${speakRow.row}  Email/Slack Sent — NOT TOUCHED (yours)`);
 
   if (!needsApproval) {
+    // State the reason the decision was actually made on. `needsBudget` reads
+    // the three ask columns, not the engagement variant, so naming the variant
+    // here would misreport a plain "Speak…" row that happens to ask for
+    // nothing — the two are not the same set.
     console.log(
-      `\n  ${APPROVALS_TAB}: skipped — "without requesting support or swag", ` +
+      `\n  ${APPROVALS_TAB}: skipped — leave, travel and hotel are all "no", ` +
         `nothing to approve.`,
     );
   } else {
@@ -293,6 +297,18 @@ const main = async () => {
   if (!verifyOnly) {
     const session = await CdpSession.open(GOOGLE);
     try {
+      // Front the workbook tab before any navigation. A backgrounded Sheets tab
+      // is throttled hard enough that the worksheet switch in `gotoCell` can
+      // miss its wait, which trips the worksheet guard and refuses a correct
+      // write. Advisory only — reported, never fatal.
+      const fronted = await session.activate();
+      if (!fronted) {
+        console.log(
+          `\n  note: could not confirm the workbook tab is frontmost — if the ` +
+            `worksheet guard refuses below, front that tab and rerun.`,
+        );
+      }
+
       const ready = await session.evaluate(`
         (() => ({
           url: location.href,

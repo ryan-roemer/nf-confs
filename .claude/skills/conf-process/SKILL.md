@@ -114,21 +114,36 @@ If the page contradicts the sheet on year, country or identity — ⛔ stop and 
 
 Set only these, and leave everything else alone:
 
-| Property                                                                                   | Value                                                 |
-| ------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
-| `Link`                                                                                     | the conference URL                                    |
-| `Date`                                                                                     | start, plus end when duration > 1                     |
-| `Event Type`                                                                               | `Conference` (almost always)                          |
-| `Engagement`                                                                               | `Speak`                                               |
-| `Status`                                                                                   | `Confirmed`                                           |
-| `Organiser`                                                                                | `Tech / Speaker Programme`                            |
-| `Who`                                                                                      | **add** the speaker; look up by email via `get_users` |
-| `Audience`, `Region`, `Location`, `Affliation`, `CFP Details`, `CFP Opens`, `CFP Deadline` | per steps 3–4                                         |
+| Property                                                                                   | Value                                                |
+| ------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
+| `Link`                                                                                     | the conference URL                                   |
+| `Date`                                                                                     | start, plus end when duration > 1                    |
+| `Event Type`                                                                               | `Conference` (almost always)                         |
+| `Engagement`                                                                               | `Speak`                                              |
+| `Status`                                                                                   | `Confirmed`                                          |
+| `Organiser`                                                                                | `Tech / Speaker Programme`                           |
+| `Who`                                                                                      | **add** the speaker; look up by email — both domains |
+| `Audience`, `Region`, `Location`, `Affliation`, `CFP Details`, `CFP Opens`, `CFP Deadline` | per steps 3–4                                        |
 
 **Never touch** `Owner`, `Tags`, `Related / CFP`.
 
 ⚠️ **`Who` is additive.** Multiple speakers per event is normal. Read the
 existing value, append, write the union. Removing a speaker is data loss.
+
+⚠️ **`Who` takes two email domains, and `get_users` cannot see guests.** Look up
+`FIRST.LAST@nearform.com` first, then `FIRST.LAST@thenearformway.com` — the
+**guest** account, usually under the same display name. Many `@nearform.com`
+members have been **deactivated in favour of** their guest account, so for a
+large share of speakers the second lookup is the only one that will ever
+resolve. A first-lookup miss is routine; don't report it as a problem.
+
+Guests do not come back from `get_users` by email, surname or user id, so an
+empty result proves nothing: never read it as "absent" or "deactivated".
+
+To name a guest id, open a page that already carries it in the conference Chrome
+and read the rendered `Who` chip. That is the only name match available, and
+Ryan confirms before you write a person you could not name that way. Full rule:
+[workflow.md](../../../docs/workflow.md) → "`Who`: two email domains".
 
 Show Ryan the exact property set before writing. On an `update`, show the
 before/after for every field you're changing and flag any existing value that

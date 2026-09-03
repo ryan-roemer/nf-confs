@@ -90,24 +90,54 @@ wrong event — flag to Ryan before proceeding.** Do not reconcile it silently.
 
 ### Field mapping
 
-| Notion property | Source                                                                                                                         | Mode                                        |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------- |
-| `Link`          | `Event website`                                                                                                                | 🤖 copy · 🧠 sanity-check against the sheet |
-| `Date`          | `Event start date` + `Event duration (in days)` → a range; duration is a number, so compute the end date                       | 🤖                                          |
-| `Event Type`    | `Event Category` (typically `Technical Conference`) → almost always **`Conference`** for this workflow                         | 🤖 default, 🧠 on anything unusual          |
-| `Engagement`    | always **`Speak`** for this workflow                                                                                           | 🤖                                          |
-| `Audience`      | `Audience:`, refined against the conference website. Typically `Developers`, `VP Engineering`, `Engineering leaders`           | 🧠                                          |
-| `Region`        | start from `Location `, then pick a Notion `Region` option                                                                     | 🤖 mapping table · 🧠 fallback              |
-| `CFP Details`   | conference website, or `Event Call for Papers (CFP) link (if applicable)`. Often left blank                                    | 🧠                                          |
-| `Status`        | always **`Confirmed`** for this workflow. May overwrite a previous value                                                       | 🤖                                          |
-| `Who`           | match `Email Address` → Notion person. **Multiple speakers per event happen. Never remove existing speakers — only add.**      | 🤖 exact lookup by email                    |
-| `Location`      | start from `Location `, then norm against the conference page **and against how existing rows are written** — not standardised | 🧠                                          |
-| `Affliation`    | figure out from the conference page (note Notion's spelling)                                                                   | 🧠                                          |
-| `CFP Opens`     | from the website / CFP link if determinable. Often not, even when the CFP is open                                              | 🧠 best-effort                              |
-| `CFP Deadline`  | from the website / CFP link if determinable                                                                                    | 🧠 best-effort                              |
-| `Organiser`     | always **`Tech / Speaker Programme`** for this workflow                                                                        | 🤖                                          |
+| Notion property | Source                                                                                                                                                 | Mode                                        |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------- |
+| `Link`          | `Event website`                                                                                                                                        | 🤖 copy · 🧠 sanity-check against the sheet |
+| `Date`          | `Event start date` + `Event duration (in days)` → a range; duration is a number, so compute the end date                                               | 🤖                                          |
+| `Event Type`    | `Event Category` (typically `Technical Conference`) → almost always **`Conference`** for this workflow                                                 | 🤖 default, 🧠 on anything unusual          |
+| `Engagement`    | always **`Speak`** for this workflow                                                                                                                   | 🤖                                          |
+| `Audience`      | `Audience:`, refined against the conference website. Typically `Developers`, `VP Engineering`, `Engineering leaders`                                   | 🧠                                          |
+| `Region`        | start from `Location `, then pick a Notion `Region` option                                                                                             | 🤖 mapping table · 🧠 fallback              |
+| `CFP Details`   | conference website, or `Event Call for Papers (CFP) link (if applicable)`. Often left blank                                                            | 🧠                                          |
+| `Status`        | always **`Confirmed`** for this workflow. May overwrite a previous value                                                                               | 🤖                                          |
+| `Who`           | match `Email Address` → Notion person, **two domains** — see below. **Multiple speakers per event happen. Never remove existing speakers — only add.** | 🤖 exact lookup by email                    |
+| `Location`      | start from `Location `, then norm against the conference page **and against how existing rows are written** — not standardised                         | 🧠                                          |
+| `Affliation`    | figure out from the conference page (note Notion's spelling)                                                                                           | 🧠                                          |
+| `CFP Opens`     | from the website / CFP link if determinable. Often not, even when the CFP is open                                                                      | 🧠 best-effort                              |
+| `CFP Deadline`  | from the website / CFP link if determinable                                                                                                            | 🧠 best-effort                              |
+| `Organiser`     | always **`Tech / Speaker Programme`** for this workflow                                                                                                | 🤖                                          |
 
 Properties this workflow never touches: `Owner`, `Tags`, `Related / CFP`.
+
+### `Who`: two email domains, and guests are invisible to `get_users`
+
+A speaker has **up to two Notion identities**, and the sheet only ever carries
+the first:
+
+1. `FIRST.LAST@nearform.com` — the normal workspace member. Try this first.
+2. `FIRST.LAST@thenearformway.com` — an **alternate guest account**, usually
+   under the **same display name**.
+
+⚠️ **This is a migration, not an edge case.** Many `@nearform.com` members have
+been **deactivated in favour of** their `@thenearformway.com` guest account. So
+for a large and growing share of speakers the guest account is not an
+alternative identity — it is the **only** one, and the sheet's `@nearform.com`
+address will never resolve. Expect the second lookup to be the one that works,
+and treat a first-lookup miss as routine rather than as a problem to report.
+
+⚠️ **`get_users` does not return guests.** A guest is invisible to every form of
+that call — by email, by surname, and by user id — so "no results" is **not**
+evidence that the person is absent or deactivated. Do not conclude either.
+
+To tie a guest `user://` id to a human, **render a page that already has them**
+in the conference Chrome and read the name Notion draws:
+
+```
+'Who' property row →  "Adam Barrett"
+```
+
+That is a live read, and it is the only name match available for a guest. Get
+Ryan's confirmation before writing a person you could not name this way.
 
 ## Confirmed against the data
 
