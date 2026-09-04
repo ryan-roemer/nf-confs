@@ -20,8 +20,8 @@ const hasFlag = (n) => args.includes(n);
 
 const money = (c) => {
   if (c.empty) return "\u2014";
-  if (c.needsRyan)
-    return `${c.raw}  \u26a0\ufe0f ${c.why} \u2014 needs your EUR figure`;
+  if (c.declined) return `${c.raw}  \u2192 treated as 0 (${c.why})`;
+  if (c.needsRyan) return `${c.raw}  \u26a0\ufe0f ${c.why}`;
   return `${c.raw}${c.assumedEur ? "  (EUR assumed \u2014 no symbol given)" : ""}`;
 };
 
@@ -40,7 +40,11 @@ const printRecord = (r) => {
   console.log(`    location   ${r.location || "\u2014"}`);
   if (!r.needsBudget) {
     console.log(
-      `    ask        none \u2014 "without requesting support or swag"`,
+      // State the fact the decision was actually made on. `needsBudget` reads
+      // the three ask columns, NOT the engagement variant, so naming the
+      // variant here would mis-attribute a plain "Speak\u2026" row that happens to
+      // ask for nothing.
+      `    ask        none \u2014 leave, travel and hotel all "no"`,
     );
   } else {
     console.log(

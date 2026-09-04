@@ -163,11 +163,19 @@ export const endDate = (startIso, durationDays) => {
 /**
  * Currency detection on a raw estimate string. Never converts.
  *
- * Calibrated against every cost value in the workbook (51 non-empty): 46 are
- * bare numbers, 5 carry an explicit `€`, and none is in another currency. So a
- * bare number is EUR by this form's convention — flagging those would put a
- * warning on almost every row and train us to ignore it. Only a foreign symbol,
- * a mixed signal, or something unparseable is worth Ryan's attention.
+ * A bare number is EUR by this form's convention — most values are bare, and
+ * flagging those would put a warning on almost every row and train us to
+ * ignore it. Only a foreign symbol, a mixed signal, a hedged figure or
+ * something unparseable is worth Ryan's attention.
+ *
+ * **The earlier calibration here was wrong, and worth knowing why.** It claimed
+ * "51 non-empty values, none in another currency". That count came from
+ * `.data/` CSVs produced by a whole-tab gviz read, which discards any cell it
+ * cannot coerce to the column's inferred type — so every `£` value had already
+ * been deleted before the calibration counted them. The workbook does contain
+ * GBP (`£100`, `£150`, `£200`, `£0`) and hedged text (`<100 EUR (if allowed to
+ * use my own car)`, `I don't need it, I'll be online`). See `probe.js`
+ * `fetchRowsIndividually`. Measure on a repaired read, never a typed one.
  */
 const CURRENCY_SIGNS = [
   ["EUR", /€|\bEUR\b|\beuros?\b/i],
@@ -186,27 +194,71 @@ const CURRENCY_SIGNS = [
 const BARE_NUMBER_RE = /^[\d]{1,7}(?:[.,]\d{1,3})?$/;
 
 /**
+ * An explicit decline: the speaker answered the cost question by saying they
+ * do not want the money. Distinct from an empty cell, which is a speaker who
+ * asked for support and left the estimate blank — that one still needs Ryan.
+ */
+const DECLINE_RE =
+  /\b(?:don'?t|do not|dont)\s+need\b|\bnot needed\b|\bno (?:cost|need|budget|expense)s?\b|\bnothing\b|\bn\/?a\b|\bnone\b|\bonline\b|\bremote(?:ly)?\b/i;
+
+/**
+ * A figure the speaker hedged rather than stated: a bound (`<100`, `up to 80`),
+ * an approximation (`~100`, `about 100`), or a range (`100-150`, `80 / 100`).
+ *
+ * These are NOT accepted automatically even when a number falls out cleanly.
+ * Accepting a budget is Ryan's call, and `<100 EUR (if allowed to use my own
+ * car)` is a conditional maximum, not a price — the number is a starting point
+ * for his decision, not the decision.
+ */
+const HEDGE_RES = [
+  [
+    "a maximum, not a price",
+    /^\s*(?:<|≤|<=|up to|max(?:imum)?\b|no more than)/i,
+  ],
+  [
+    "an approximation",
+    /~|\bapprox(?:\.|imately)?\b|\babout\b|\baround\b|\broughly\b|\bcirca\b|\bish\b/i,
+  ],
+  ["a range, not one figure", /\d\s*(?:-|–|—|\/|\bto\b|\bor\b)\s*\d/],
+  [
+    "conditional on something",
+    /\bif\b|\bdepend(?:s|ing)?\b|\bprovided\b|\bassuming\b|\bshould\b/i,
+  ],
+];
+
+/** First number in a hedged string, so Ryan gets a starting point not a blank. */
+const firstNumber = (s) => {
+  const m = s.match(/\d{1,7}(?:[.,]\d{1,3})?/);
+  return m ? Number(m[0].replace(",", ".")) : null;
+};
+
+/**
  * Classify a cost estimate without ever converting it.
  *
  * @returns {{raw: string, empty: boolean, currencies: string[],
  *   amount: number|null, assumedEur: boolean, needsRyan: boolean,
- *   why: string|null}}
+ *   declined: boolean, hedged: string|null, why: string|null}}
  *   `needsRyan` means the workflow must stop and ask: the value is in a
- *   non-EUR currency, mixes currencies, or cannot be read as a single number.
+ *   non-EUR currency, mixes currencies, is hedged rather than stated, or
+ *   cannot be read as a single number. `amount` on a hedged value is a
+ *   starting point for his decision, never an accepted figure.
+ *   `declined` is the speaker saying they want no money — a real zero.
  */
 export const classifyCost = (raw) => {
   const s = (raw ?? "").trim();
-  if (!s) {
-    return {
-      raw: s,
-      empty: true,
-      currencies: [],
-      amount: null,
-      assumedEur: false,
-      needsRyan: false,
-      why: null,
-    };
-  }
+  const base = {
+    raw: s,
+    empty: false,
+    currencies: [],
+    amount: null,
+    assumedEur: false,
+    needsRyan: false,
+    declined: false,
+    hedged: null,
+    why: null,
+  };
+
+  if (!s) return { ...base, empty: true };
 
   const currencies = CURRENCY_SIGNS.filter(([, re]) => re.test(s)).map(
     ([code]) => code,
@@ -218,48 +270,75 @@ export const classifyCost = (raw) => {
     ? Number(stripped.replace(",", "."))
     : null;
 
+  // An explicit decline is an answer, not a gap. Checked before the number so
+  // "I don't need it" never becomes a stop for Ryan to resolve — but only when
+  // no figure is attached, since "no more than 100" also matches loosely.
+  if (numeric === null && DECLINE_RE.test(s) && firstNumber(s) === null) {
+    return {
+      ...base,
+      currencies,
+      amount: 0,
+      declined: true,
+      why: "speaker declined the money",
+    };
+  }
+
+  // A hedged figure outranks a clean parse: `<100` and `100-150` can both
+  // yield a number, and treating either as the price would be us accepting a
+  // budget on Ryan's behalf.
+  const hedge = HEDGE_RES.find(([, re]) => re.test(s));
+  if (hedge) {
+    const [label] = hedge;
+    const guess = numeric ?? firstNumber(s);
+    const foreign = currencies.filter((c) => c !== "EUR");
+    return {
+      ...base,
+      currencies,
+      amount: guess,
+      hedged: label,
+      needsRyan: true,
+      why:
+        `${label}${guess === null ? "" : ` (reads as ${guess})`}` +
+        (foreign.length ? ` and in ${foreign.join("/")}, not EUR` : "") +
+        " — needs your figure",
+    };
+  }
+
   if (currencies.length > 1) {
     return {
-      raw: s,
-      empty: false,
+      ...base,
       currencies,
       amount: numeric,
-      assumedEur: false,
       needsRyan: true,
       why: `mixed currencies (${currencies.join("/")})`,
     };
   }
   if (currencies.length === 1 && currencies[0] !== "EUR") {
     return {
-      raw: s,
-      empty: false,
+      ...base,
       currencies,
-      amount: numeric,
-      assumedEur: false,
+      amount: numeric ?? firstNumber(s),
       needsRyan: true,
       why: `${currencies[0]}, not EUR`,
     };
   }
   if (numeric === null) {
+    // No hint here on purpose. `1.500,50` would yield 1.5, and a wrong number
+    // beside a warning is worse than no number: it invites a glance instead of
+    // a read of the raw value.
     return {
-      raw: s,
-      empty: false,
+      ...base,
       currencies,
-      amount: null,
-      assumedEur: false,
       needsRyan: true,
       why: "not a single readable number",
     };
   }
   return {
-    raw: s,
-    empty: false,
+    ...base,
     currencies,
     amount: numeric,
     // A bare number carries no symbol; record that we supplied the currency.
     assumedEur: currencies.length === 0,
-    needsRyan: false,
-    why: null,
   };
 };
 

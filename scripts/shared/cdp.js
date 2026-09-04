@@ -373,3 +373,62 @@ export const requireHostTab = (browser, hostRe, openUrl) => {
   }
   return { context, pages };
 };
+
+/**
+ * ONE page, chosen by what it actually holds — use this instead of taking
+ * `requireHostTab(...).pages[0]`.
+ *
+ * **Why this exists.** Ryan's conference Chrome runs a dozen-plus tabs, and a
+ * host match is not a document match: `docs.google.com` matches Docs, Sheets
+ * and Drive alike. On 2026-09-03 `pages[0]` handed back a Google **Docs** tab
+ * for a spreadsheet read, and the in-page `fetch` then failed with a bare
+ * `TypeError: Failed to fetch` — a symptom that looks like a network or auth
+ * problem and is really "wrong tab". `pickTarget` in `cdp-eval.js` avoids this
+ * by preferring `/spreadsheets/d/`; this is the same idea for Playwright pages,
+ * and it **throws rather than guessing** when the match is not unique.
+ *
+ * Three other CDP footguns, all hit the same day, none of them Chrome's fault:
+ *
+ *  - **Never `await response.text()` inside a `page.on("response")` handler
+ *    while navigating.** It stalls the navigation and surfaces as a `goto`
+ *    timeout. Collect the URLs during load and re-fetch in-page afterwards.
+ *  - **Never guess a selector on a heavy SPA.** Query for it, log what came
+ *    back, and only then act. Notion renders no plain `input[type=search]`.
+ *  - **A scroll loop must prove it scrolled.** Check `scrollTop` moved or the
+ *    row count grew before iterating; otherwise you scroll the sidebar sixty
+ *    times and report a confident zero.
+ *
+ * @param {import("playwright").Browser} browser
+ * @param {{hostRe: RegExp, urlIncludes?: string, what: string}} spec
+ *   `urlIncludes` is matched against the full URL, e.g. `"/spreadsheets/d/"` or
+ *   a document key. `what` names the thing, for the error message.
+ * @returns {import("playwright").Page}
+ */
+export const requirePage = (browser, { hostRe, urlIncludes, what }) => {
+  const { pages } = requireHostTab(browser, hostRe, `a ${what} tab`);
+  const matches = urlIncludes
+    ? pages.filter((p) => p.url().includes(urlIncludes))
+    : pages;
+
+  const listing = () =>
+    pages.map((p, i) => `    [${i}] ${p.url().slice(0, 110)}`).join("\n");
+
+  if (matches.length === 0) {
+    throw new Error(
+      `No tab is showing ${what}` +
+        `${urlIncludes ? ` (URL must contain ${JSON.stringify(urlIncludes)})` : ""}.\n` +
+        `  ${pages.length} tab(s) matched the host but none the document:\n` +
+        `${listing()}\n` +
+        `  Open ${what} in the conference Chrome, then rerun.`,
+    );
+  }
+  if (matches.length > 1) {
+    throw new Error(
+      `${matches.length} tabs are showing ${what} — refusing to pick one, ` +
+        `because driving the wrong\n  tab in Ryan's browser is exactly the ` +
+        `failure this guard exists for:\n${listing()}\n` +
+        `  Close the duplicates, or narrow urlIncludes.`,
+    );
+  }
+  return matches[0];
+};

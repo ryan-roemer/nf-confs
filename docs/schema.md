@@ -112,7 +112,7 @@ Consequence for writing: the mirrored columns are formula output and must never
 be written to. Only the hand-maintained workflow columns are writable, addressed
 by row index.
 
-### Two traps this tab sets
+### Three traps this tab sets
 
 **1. Row count. `Speaking Events` has 1694 non-empty lines and 112 real rows.**
 Rows 116–1693 are pre-dragged formulas emitting `N,N,N,FALSE,FALSE` forever. Any
@@ -129,6 +129,30 @@ single-row range (`range=A1:ZZ1`), where every cell is a string, and splice it
 over the body's first line. `scripts/sheet/probe.js` does this, and the saved
 files then show all 24 of `Speaking Events`' real columns (indices 0–23; 24–32
 are empty trailing columns).
+
+**2b. The same typing deletes BODY cells, not just headers — and this one costs
+money.** Verified 2026-09-03. Type inference is per column over the requested
+range, so in a mostly-numeric column every **text** cell is discarded and comes
+back **blank**. A dropped cell is byte-identical to an empty one, so a cost
+estimate that was given reads downstream as _nothing was requested_.
+
+Measured live: **35 cells** across the workbook, 113/113 rows paired — 7 travel
+estimates, 8 accommodation estimates, 16 attendee counts, 4 TravelPerk/Expensify
+values. The deleted cost values include `£100`, `£150`, `£200`, `£400`, `£130`,
+`£0` — **currency conversions, which are Ryan's alone** — and
+`<100 EUR (if allowed to use my own car)`.
+
+Fix: the same single-row-range trick as the headers, applied per row.
+`probe.js` re-reads every email-bearing row as `range=A<n>:ZZ<n>` and fills
+blanks from it, pairing **positionally** over email-bearing rows — `(email,
+name)` is _not_ a key, because the same person resubmits the same conference
+(Dario Scanferlato has two `Ticino Data Conference 2026` rows). A count mismatch
+abstains and says so. Every run prints the recovered count; `--no-repair` opts
+out and warns that a dropped cost then looks empty.
+
+**Never calibrate a parser on `.data/` CSVs produced without the repair pass** —
+the GBP values were absent from an earlier calibration that concluded "no value
+is in another currency".
 
 **3. And a trap in tab addressing.** The tab strip's DOM `data-id` is not the
 worksheet gid — it returns ordinals (4, 41, 51) — and gviz answers an

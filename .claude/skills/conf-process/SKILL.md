@@ -130,20 +130,29 @@ Set only these, and leave everything else alone:
 ⚠️ **`Who` is additive.** Multiple speakers per event is normal. Read the
 existing value, append, write the union. Removing a speaker is data loss.
 
-⚠️ **`Who` takes two email domains, and `get_users` cannot see guests.** Look up
-`FIRST.LAST@nearform.com` first, then `FIRST.LAST@thenearformway.com` — the
-**guest** account, usually under the same display name. Many `@nearform.com`
-members have been **deactivated in favour of** their guest account, so for a
-large share of speakers the second lookup is the only one that will ever
-resolve. A first-lookup miss is routine; don't report it as a problem.
+**Look the speaker up with `search`, in ONE call:**
 
-Guests do not come back from `get_users` by email, surname or user id, so an
-empty result proves nothing: never read it as "absent" or "deactivated".
+```
+search(query: "<the sheet's email>", query_type: "user")
+```
 
-To name a guest id, open a page that already carries it in the conference Chrome
-and read the rendered `Who` chip. That is the only name match available, and
-Ryan confirms before you write a person you could not name that way. Full rule:
-[workflow.md](../../../docs/workflow.md) → "`Who`: two email domains".
+It returns the `user://` id, the true display name and the real email together.
+It **sees guests**, and it resolves an `@nearform.com` address straight to the
+person's `@thenearformway.com` guest account — so there is no second lookup and
+no domain guessing. A bare surname works too.
+
+⛔ **Do not use `get_users`, and do not scrape the people directory.**
+`get_users` structurally cannot see guests — not by either email, surname, first
+name, display name, user id, or in its unfiltered listing — and many speakers
+exist _only_ as guests. The Notion people directory is Notion-managed
+(`restricted_resource` to `fetch`), virtualised in the browser, and filtered to
+members by default; scraping it finds nothing and changing its filter would
+alter a view the whole team sees. Both were tried on 2026-09-03 and wasted a
+long detour. Full rule: [workflow.md](../../../docs/workflow.md) → "`Who`: look
+speakers up with `search`".
+
+Confirm with Ryan only when the returned display name does not plainly match
+the speaker on the sheet.
 
 Show Ryan the exact property set before writing. On an `update`, show the
 before/after for every field you're changing and flag any existing value that
@@ -202,6 +211,15 @@ around them.
   is false and sets **only** `Leave Days`; money columns stay blank. The run
   prints the override beside what the form said, so show him that before
   `--apply`. Pair it with `--backfill` if the record is already processed.
+- **`--travel-eur N` / `--hotel-eur N` when a cost needs Ryan.** A foreign
+  currency, mixed currencies, or a hedged figure (`<100 EUR (if allowed to use
+my own car)`, `up to 80`, `100-150`) sets `needsRyan`, and the run then
+  **refuses — dry run included** — rather than writing the parser's reading.
+  The refusal prints the raw value, why it stopped, and the flag to use. The
+  parsed number is shown as a hint only: **it is not a price**, and passing it
+  back unchanged still has to be Ryan's decision, not a default you accept for
+  him. `Total` is computed from the figures actually written, never from
+  `ask.total`.
 - **`Speaking` is written last**, after Notion and after any Approvals row. It
   is the processed marker; nothing else is.
 
@@ -231,6 +249,70 @@ failed check because the retry passed. Log any new failure mode in
 Preconditions **flag and stop** — signed out, wrong workbook, editor not loaded.
 Report what is wrong and hand it to Ryan; never try to fix it silently. He is
 supervising and would rather be told.
+
+## Step 7 — offer the speaker email
+
+**Offer it; never assume it.** Ryan sends this for some entries and not others,
+so after the sheet write, ask whether he wants it. Output it as a **raw markdown
+code block** so he can copy it straight out — do not send anything anywhere
+yourself, and do not render it as prose.
+
+**Never invent an email address.** The form gives supervisor _names_, not
+addresses. Write `Name <ADDRESS TO CONFIRM>` for anyone whose address you did
+not get from Ryan or a live read.
+
+### The three budget variants
+
+The template assumes travel _and_ accommodation. Adapt both affected sentences
+to what was actually approved, and say which variant you used:
+
+| Approved                    | Approval sentence                        | Booking sentence                                  |
+| --------------------------- | ---------------------------------------- | ------------------------------------------------- |
+| travel + hotel              | `have approved travel and accommodation` | `book your hotel and travel expenses`             |
+| travel only                 | `have approved travel`                   | `book your travel expenses`                       |
+| hotel only                  | `have approved accommodation`            | `book your hotel`                                 |
+| neither (leave, or nothing) | drop the sentence from `We've reviewed…` | **drop the whole TravelPerk/Expensify paragraph** |
+
+Other conditionals:
+
+- **No leave requested** → drop the `please be sure to approve 1 day` sentence
+  and the line-manager clause; keep the Learning Leave invitation.
+- **A supervisor slot is empty** → drop that clause rather than guessing who
+  fills it. If _no_ supervisor is named at all, drop the CC additions and flag
+  it to Ryan, because the leave-approval sentence has no addressee.
+- **One person covers several slots** → name them once, and say so.
+
+### Template
+
+```markdown
+TO: [SPEAKER]
+
+CC: `Amy Lavelle <amy.lavelle@nearform.com>`, [ALL OTHER SUPERVISORS]
+
+SUBJECT: Event Speaking Request - [INSERT INFO]
+
+Hi [INSERT NAME],
+
+Congrats on being selected to be a Speaker at [INSERT CONFERENCE] on [INSERT DATE]. The event has been added to the Events Calendar. We've reviewed your Event Speaking request and have approved travel and accommodation. I believe that you already have approval for the leave from your line manager, [INSERT LM NAME]. I've also CC'ed in [INSERT TD NAME] to keep in the loop on project timing and [INSERT HOD/GM NAME(S)] for visibility into your being selected to speak!
+
+[INSERT LM NAME], please be sure to approve 1 day of Event Speaking leave in Netsuite. [INSERT SPEAKER NAME], if you plan to attend other days, I would invite you to use your Learning Leave as described in the Learning & Development policy.
+
+Please use TravelPerk to book your hotel and travel expenses and Expensify for your meals after your return, see the Event Speaking Program.
+
+Upon your return, can you please fill in the Event Feedback Form? This helps us know what events are interesting for next year!
+
+Be sure to check out the resources (including a Nearform Speaker's Deck template) on the Speakers Toolkit in Notion. After the conference, we'd love to have you write a short blog post about your experience — something in line with either your talk and reception, or the conference experience itself that you'd like to share with others. There are some example posts linked to from the Speakers Toolkit, if you're looking for inspiration / direction.
+
+Finally, if you wish to request swag or other marketing materials, please use the Event Proposal Form with the specifics of what you need, why, and when. Let me know if you have any questions.
+
+All best,
+
+Ryan
+```
+
+Leave the template's wording alone otherwise. Requests in the speaker's
+`Additional comments:` — a review of their slides, say — are **not** covered by
+it; mention them to Ryan separately rather than improvising a paragraph.
 
 ## Capturing decisions
 

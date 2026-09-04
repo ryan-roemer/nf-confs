@@ -109,35 +109,45 @@ wrong event — flag to Ryan before proceeding.** Do not reconcile it silently.
 
 Properties this workflow never touches: `Owner`, `Tags`, `Related / CFP`.
 
-### `Who`: two email domains, and guests are invisible to `get_users`
+### `Who`: look speakers up with `search`, never `get_users`
 
-A speaker has **up to two Notion identities**, and the sheet only ever carries
-the first:
-
-1. `FIRST.LAST@nearform.com` — the normal workspace member. Try this first.
-2. `FIRST.LAST@thenearformway.com` — an **alternate guest account**, usually
-   under the **same display name**.
-
-⚠️ **This is a migration, not an edge case.** Many `@nearform.com` members have
-been **deactivated in favour of** their `@thenearformway.com` guest account. So
-for a large and growing share of speakers the guest account is not an
-alternative identity — it is the **only** one, and the sheet's `@nearform.com`
-address will never resolve. Expect the second lookup to be the one that works,
-and treat a first-lookup miss as routine rather than as a problem to report.
-
-⚠️ **`get_users` does not return guests.** A guest is invisible to every form of
-that call — by email, by surname, and by user id — so "no results" is **not**
-evidence that the person is absent or deactivated. Do not conclude either.
-
-To tie a guest `user://` id to a human, **render a page that already has them**
-in the conference Chrome and read the name Notion draws:
+**Use `notion-search` with `query_type: "user"`. One call, the sheet's own
+email, done:**
 
 ```
-'Who' property row →  "Adam Barrett"
+search(query: "dario.scanferlato@nearform.com", query_type: "user")
+  → <user id="{{user://351d872b-594c-8174-9038-00027f076330}}"
+           name="Dario Ruben Scanferlato"
+           email="dario.scanferlato@thenearformway.com"/>
 ```
 
-That is a live read, and it is the only name match available for a guest. Get
-Ryan's confirmation before writing a person you could not name this way.
+That call **sees guests**, and it resolves the `@nearform.com` address the sheet
+carries **to the guest account** — so it needs no second lookup, no domain
+guessing, and no page rendering. It also matches on a bare surname. It returns
+the id, the real display name and the true email together, which is the
+confirmation step as well as the lookup.
+
+⚠️ **`get_users` cannot see guests, by any query.** Verified 2026-09-03 against
+Dario Ruben Scanferlato: empty for both email domains, for `Scanferlato`, for
+`Dario`, for `Ruben`, for the full display name, and absent from the unfiltered
+`page_size: 100` listing where he belongs alphabetically (between "Danny Hunn"
+and "Darko Pranjic"). A control member resolved on the same call, so the call
+was working. **Do not use `get_users` for speaker lookup**, and never read its
+silence as "absent" or "deactivated".
+
+**Why this matters beyond convenience:** many `@nearform.com` members have been
+deactivated in favour of their `@thenearformway.com` guest account, so for a
+large share of speakers the guest identity is the only one. `search` finds them;
+`get_users` structurally cannot.
+
+Two other dead ends, so nobody re-walks them: the Notion **people directory**
+(`app.notion.com/p/nearform/d3d9aa50…`) is Notion-managed and returns
+`restricted_resource` to `fetch`, and in the browser it is virtualised and
+defaults to **members only** — so scraping it finds nothing and changing its
+filter would alter a view the whole team sees. Don't.
+
+Still get Ryan's confirmation before writing a person whose returned display
+name does not plainly match the speaker on the sheet.
 
 ## Confirmed against the data
 

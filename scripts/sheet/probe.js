@@ -9,6 +9,8 @@
  *
  *   npm run sheet:probe            tab names, gids, headers, row counts
  *   npm run sheet:probe -- --save  also write each tab's full CSV to .data/
+ *   npm run sheet:probe -- --no-repair  skip the row-wise repair pass (fast,
+ *                                  but silently loses text in typed columns)
  *
  * .data/ is gitignored on purpose: this workbook carries employee emails,
  * costs and leave, which should not land in git.
@@ -98,6 +100,150 @@ const fetchTabCsv = async (page, key, tabName, range) => {
   }, url);
 };
 
+/** Serialize one row back to a CSV line, quoting only what needs it. */
+export const toCsvLine = (cells) =>
+  cells
+    .map((c) => (/[",\n\r]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c))
+    .join(",");
+
+/**
+ * Read a tab one absolute row at a time, so gviz cannot type-infer a cell away.
+ *
+ * This is the same trick the header read uses, for the same reason — but the
+ * body needs it just as badly. **Over a whole column gviz infers a type from
+ * the data and DISCARDS every cell it cannot coerce, returning blank.** A
+ * mostly-numeric cost column therefore swallows `£100` and
+ * `<100 EUR (if allowed to use my own car)` and reports them as *empty*, which
+ * reads downstream as "nothing was requested". Measured on 2026-09-03: 85 cells
+ * across 26 columns, including nine travel and ten hotel estimates. A
+ * single-row range gives each column exactly one value, so text survives.
+ *
+ * Stops once `wanted` email-bearing rows are found, plus a short overrun to
+ * catch a miscount: `Speaking Events` carries formulas dragged ~1600 rows past
+ * the data, and scanning those would cost hundreds of requests for nothing.
+ *
+ * @param {number} wanted email-bearing rows the whole-tab read found.
+ * @returns {Promise<{rows: Array<{row: number, cells: string[]}>,
+ *   scanned: number, error: string|null}>}
+ */
+const fetchRowsIndividually = async (page, key, tabName, wanted, cap = 600) => {
+  const BATCH = 10;
+  const OVERRUN_BATCHES = 2;
+  const rows = [];
+  let scanned = 0;
+  let overrun = 0;
+
+  for (let start = 2; start <= cap; start += BATCH) {
+    if (rows.length >= wanted && overrun++ >= OVERRUN_BATCHES) break;
+
+    const batch = await page.evaluate(
+      async ([k, t, from, n]) => {
+        const one = async (r) => {
+          const u =
+            `https://docs.google.com/spreadsheets/d/${k}/gviz/tq?tqx=out:csv` +
+            `&headers=0&sheet=${encodeURIComponent(t)}&range=A${r}:ZZ${r}`;
+          try {
+            const res = await fetch(u, {
+              credentials: "include",
+              headers: { Accept: "text/csv" },
+            });
+            if (res.status !== 200)
+              return { row: r, status: res.status, text: "" };
+            return {
+              row: r,
+              status: 200,
+              text: (await res.text()).split("\n")[0] ?? "",
+            };
+          } catch {
+            return { row: r, status: 0, text: "" };
+          }
+        };
+        return Promise.all(Array.from({ length: n }, (_, i) => one(from + i)));
+      },
+      [key, tabName, start, BATCH],
+    );
+
+    scanned += batch.length;
+    for (const b of batch) {
+      if (b.status !== 200) {
+        return { rows, scanned, error: `HTTP ${b.status} on row ${b.row}` };
+      }
+      // Same definition of "a real row" the whole-tab read uses, so the two
+      // subsequences are directly comparable.
+      if (b.text.includes("@"))
+        rows.push({ row: b.row, cells: parseCsvLine(b.text) });
+    }
+  }
+  return { rows, scanned, error: null };
+};
+
+/**
+ * Fill cells the whole-tab read dropped, taking the row-wise read as truth.
+ *
+ * Pairing is **positional** over email-bearing rows in sheet order, never by
+ * identity. Two reasons, both live in this workbook:
+ *
+ *   - `(email, name)` is not a key. The same person legitimately submits the
+ *     same conference twice — Dario Scanferlato has two `Ticino Data
+ *     Conference 2026` rows — so an identity join silently maps one row's
+ *     values onto the other and invents "drops" that are really collisions.
+ *   - gviz collapses blank rows, so a CSV line number is not a sheet row.
+ *
+ * Position within the email-bearing subsequence is the only stable join, and a
+ * count mismatch means we abstain rather than guess.
+ *
+ * @returns {{lines: string[], repaired: number, columns: Array<[number, number]>,
+ *   paired: number, skipped: string|null}}
+ */
+const repairDroppedCells = (dataLines, liveRows) => {
+  const csvIdx = [];
+  dataLines.forEach((l, i) => {
+    if (l.includes("@")) csvIdx.push(i);
+  });
+
+  if (csvIdx.length !== liveRows.length) {
+    return {
+      lines: dataLines,
+      repaired: 0,
+      columns: [],
+      paired: 0,
+      skipped:
+        `whole-tab read has ${csvIdx.length} email-bearing rows but the ` +
+        `row-wise read found ${liveRows.length} — refusing to pair them`,
+    };
+  }
+
+  const lines = [...dataLines];
+  const byCol = new Map();
+  let repaired = 0;
+
+  csvIdx.forEach((li, k) => {
+    const live = liveRows[k].cells;
+    const saved = parseCsvLine(lines[li]);
+    // The dropped-value case often shortens the row, so pad before indexing.
+    while (saved.length < live.length) saved.push("");
+
+    let touched = false;
+    for (let c = 0; c < live.length; c++) {
+      if ((live[c] ?? "").trim() && !(saved[c] ?? "").trim()) {
+        saved[c] = live[c];
+        byCol.set(c, (byCol.get(c) ?? 0) + 1);
+        repaired += 1;
+        touched = true;
+      }
+    }
+    if (touched) lines[li] = toCsvLine(saved);
+  });
+
+  return {
+    lines,
+    repaired,
+    columns: [...byCol.entries()].sort((a, b) => a[0] - b[0]),
+    paired: csvIdx.length,
+    skipped: null,
+  };
+};
+
 /** Cheap content fingerprint, to catch "every tab came back the same". */
 const fingerprint = (text) => {
   let h = 0;
@@ -127,6 +273,7 @@ const main = async () => {
   const cfg = JSON.parse(await readFile("config/targets.json", "utf8"));
   const { key, url, pointedAtGid } = cfg.sheet;
   const save = hasFlag("--save");
+  const repairOn = !hasFlag("--no-repair");
 
   const browser = await connectToChrome();
   const { context } = requireHostTab(
@@ -154,7 +301,9 @@ const main = async () => {
     if (save) await mkdir(OUT_DIR, { recursive: true });
 
     let read = 0;
+    let repairedTotal = 0;
     const failures = [];
+    const repairSkipped = [];
     const seen = new Map();
 
     for (const tab of tabs) {
@@ -217,6 +366,53 @@ const main = async () => {
             .slice(0, 2000),
       );
 
+      // Splice the good header over gviz's degraded one, so the saved file
+      // stands on its own offline. Over a whole column gviz types the column
+      // from its data and drops a text header it cannot coerce, so every
+      // date and number column would otherwise have a blank name.
+      let bodyLines = body.text.split("\n");
+      bodyLines[0] = head.text.split("\n")[0] ?? bodyLines[0];
+
+      // The body needs the same protection as the header, per cell. Always
+      // run it, saving or not: the point is to make the loss VISIBLE, and a
+      // read that quietly dropped ten cost estimates must not print clean.
+      if (repairOn && withEmail > 0) {
+        const live = await fetchRowsIndividually(
+          page,
+          key,
+          tab.name,
+          withEmail,
+        );
+        if (live.error) {
+          repairSkipped.push({ tab: tab.name, why: live.error });
+          console.log(`      repair  ABSTAINED — ${live.error}`);
+        } else {
+          const rep = repairDroppedCells(bodyLines, live.rows);
+          if (rep.skipped) {
+            repairSkipped.push({ tab: tab.name, why: rep.skipped });
+            console.log(`      repair  ABSTAINED — ${rep.skipped}`);
+          } else {
+            bodyLines = rep.lines;
+            repairedTotal += rep.repaired;
+            console.log(
+              `      repair  ${rep.paired}/${withEmail} rows re-read cell-by-cell; ` +
+                `${rep.repaired} cell(s) recovered that the whole-tab read dropped`,
+            );
+            for (const [c, n] of rep.columns) {
+              console.log(
+                `                 col [${c}] ${header[c] ? header[c].slice(0, 60) : "—"}: ${n}`,
+              );
+            }
+          }
+        }
+      } else if (repairOn) {
+        repairSkipped.push({
+          tab: tab.name,
+          why: "no email-bearing rows to pair on",
+        });
+        console.log("      repair  skipped — no email-bearing rows to pair on");
+      }
+
       if (save) {
         const slug =
           tab.name
@@ -224,12 +420,6 @@ const main = async () => {
             .replace(/^-|-$/g, "")
             .toLowerCase() || `tab-${tab.index}`;
         const out = join(OUT_DIR, `${tab.index}-${slug}.csv`);
-        // Splice the good header over gviz's degraded one, so the saved file
-        // stands on its own offline. Over a whole column gviz types the column
-        // from its data and drops a text header it cannot coerce, so every
-        // date and number column would otherwise have a blank name.
-        const bodyLines = body.text.split("\n");
-        bodyLines[0] = head.text.split("\n")[0] ?? bodyLines[0];
         await writeFile(out, bodyLines.join("\n"), "utf8");
         console.log(`      saved: ${out}`);
       }
@@ -243,6 +433,22 @@ const main = async () => {
         `${failures.length} failed or suspect.`,
     );
     for (const f of failures) console.log(`  FAILED  ${f.tab}: ${f.why}`);
+
+    if (!repairOn) {
+      console.log(
+        "\n--no-repair was set: cells gviz could not coerce to a typed column " +
+          "are\nMISSING from this read, and a dropped cost estimate looks " +
+          "exactly like an\nempty one. Do not make a budget call on it.",
+      );
+    } else {
+      console.log(
+        `Recovered ${repairedTotal} cell(s) the whole-tab read dropped, ` +
+          `across ${tabs.length - repairSkipped.length} of ${tabs.length} tabs.`,
+      );
+      for (const s of repairSkipped) {
+        console.log(`  NOT REPAIRED  ${s.tab}: ${s.why}`);
+      }
+    }
     if (failures.length > 0) process.exitCode = 1;
   } finally {
     await page.close();

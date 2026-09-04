@@ -18,6 +18,11 @@
  * to it. Ryan supplies that number; it is the only way to force an Approvals
  * row for a record whose `needsBudget` is false, and it never invents money.
  *
+ * `--travel-eur N` / `--hotel-eur N` supply a cost figure the parser is not
+ * allowed to decide — a foreign currency, or a hedged value like
+ * `<100 EUR (if allowed to use my own car)`. Without them such a record is
+ * REFUSED, dry run included, rather than written from the parser's hint.
+ *
  * Safety rules this enforces, each earned from a real failure:
  *
  *  - **Rows are resolved, never derived.** gviz collapses blank rows, so a
@@ -118,27 +123,81 @@ const today = () => {
 };
 
 /**
+ * The EUR figure to write for one cost, or `null` for "leave the cell blank".
+ *
+ * **A cost the parser cannot accept never reaches the sheet on its own.** When
+ * `classifyCost` sets `needsRyan` — a foreign currency, mixed currencies, a
+ * hedged figure (`<100 EUR (if allowed to use my own car)`), or something
+ * unreadable — `amount` is a *hint for Ryan*, not a price. Writing it would be
+ * the workflow accepting a budget, which is his call alone, so the caller must
+ * pass an explicit override or the run refuses.
+ *
+ * `declined` is different: the speaker answered "I don't need it", which is a
+ * real 0 and needs no confirmation. It still leaves the cell blank, because a
+ * declined cost is not a €0 approval.
+ *
+ * @param {ReturnType<typeof import("./lib/rows.js").classifyCost>} cost
+ * @param {number|null|undefined} override Ryan's EUR figure, if he gave one.
+ * @returns {number|null}
+ */
+const resolveCost = (cost, override) => {
+  if (override != null) return override;
+  if (cost.declined) return null;
+  if (cost.needsRyan) return null;
+  return cost.amount ?? null;
+};
+
+/**
+ * Costs that need Ryan's figure and did not get one. The run must refuse
+ * rather than write the parser's hint.
+ *
+ * @returns {Array<{flag: string, label: string, raw: string, why: string,
+ *   hint: number|null}>}
+ */
+const unresolvedCosts = (record, eur = {}) =>
+  [
+    ["--travel-eur", "Travel", record.ask.travelCost, eur.travel],
+    ["--hotel-eur", "Accomodations", record.ask.hotelCost, eur.hotel],
+  ]
+    .filter(([, , cost, override]) => cost.needsRyan && override == null)
+    .map(([flag, label, cost]) => ({
+      flag,
+      label,
+      raw: cost.raw,
+      why: cost.why,
+      hint: cost.amount,
+    }));
+
+/**
  * The cells an Approvals row is made of. `null` means "tab past, write nothing".
  *
  * @param {object} record
  * @param {number|null} leaveDays Ryan's `--leave-days` override, or null to use
  *   what the form says. The form only asks leave yes/no, so a day count that
  *   differs from the submission can only come from him.
+ * @param {{travel: number|null, hotel: number|null}} eur Ryan's
+ *   `--travel-eur` / `--hotel-eur` figures. Required whenever `classifyCost`
+ *   says `needsRyan` — see `resolveCost`.
  */
-const approvalCells = (record, leaveDays = null) => {
-  // No cost on either side means there is nothing to total. `ask.total` is 0
-  // rather than null in that case, and typing 0 into a currency column renders
-  // "€0" — which is not what a leave-only row looks like. Every hand-written
-  // leave-only row in the tab leaves Travel, Accomodations and Total blank.
-  const noCosts =
-    record.ask.travelCost.amount == null && record.ask.hotelCost.amount == null;
+const approvalCells = (record, leaveDays = null, eur = {}) => {
+  const travel = resolveCost(record.ask.travelCost, eur.travel);
+  const hotel = resolveCost(record.ask.hotelCost, eur.hotel);
+
+  // No cost on either side means there is nothing to total. Typing 0 into a
+  // currency column renders "€0", which is not what a leave-only row looks
+  // like — every hand-written leave-only row in the tab leaves Travel,
+  // Accomodations and Total blank.
+  const noCosts = travel == null && hotel == null;
   return [
     ["A", "Email", record.email],
     ["B", "Conf", record.name],
     ["C", "Date", record.date.iso],
-    ["D", "Travel", record.ask.travelCost.amount ?? ""],
-    ["E", "Accomodations", record.ask.hotelCost.amount ?? ""],
-    ["F", "Total", noCosts ? "" : (record.ask.total ?? "")],
+    ["D", "Travel", travel ?? ""],
+    ["E", "Accomodations", hotel ?? ""],
+    // Total is derived from the figures actually being written, never from
+    // `ask.total`. `ask.total` is null whenever either side needs Ryan, which
+    // would have written a filled Travel beside an empty Total.
+    ["F", "Total", noCosts ? "" : (travel ?? 0) + (hotel ?? 0)],
     ["G", "Actuals", null],
     ["H", "Leave Days", leaveDays ?? (record.ask.leave ? 1 : "")],
   ];
@@ -177,6 +236,27 @@ const main = async () => {
     }
   }
 
+  // `--travel-eur N` / `--hotel-eur N` — Ryan supplying a figure the parser is
+  // not allowed to decide. Same shape as `--leave-days`, and required whenever
+  // `classifyCost` says `needsRyan`; see `resolveCost`.
+  const eur = {};
+  for (const [flag, slot] of [
+    ["--travel-eur", "travel"],
+    ["--hotel-eur", "hotel"],
+  ]) {
+    const raw = argValue(flag);
+    if (raw === null) continue;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) {
+      console.error(
+        `${flag} must be a non-negative number of EUR, got ${JSON.stringify(raw)}.`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+    eur[slot] = n;
+  }
+
   const cfg = JSON.parse(await readFile("config/targets.json", "utf8"));
   const key = cfg.sheet.key;
 
@@ -212,6 +292,32 @@ const main = async () => {
     return;
   }
   const record = matches[0];
+
+  // A cost the parser is not allowed to accept must not reach the sheet, and
+  // this refuses on the DRY RUN too — the dry run is what Ryan reads before
+  // approving, so printing a figure here that he never supplied is the same
+  // mistake one step earlier.
+  const unresolved = unresolvedCosts(record, eur);
+  if (unresolved.length > 0) {
+    console.error(
+      `Refusing to touch ${record.name}: ${unresolved.length} cost value(s) ` +
+        `need your EUR figure.\n`,
+    );
+    for (const u of unresolved) {
+      console.error(
+        `  ${u.label.padEnd(14)} ${JSON.stringify(u.raw)}\n` +
+          `  ${"".padEnd(14)} ${u.why}\n` +
+          `  ${"".padEnd(14)} supply it with ${u.flag} <amount>` +
+          `${u.hint == null ? "" : `  (it reads as ${u.hint}, but that is a hint, not a price)`}\n`,
+      );
+    }
+    console.error(
+      "Accepting a budget and converting a currency are yours alone, so the\n" +
+        "parser's reading is never written unattended.",
+    );
+    process.exitCode = 1;
+    return;
+  }
 
   if (backfill) {
     console.log(
@@ -328,7 +434,7 @@ const main = async () => {
           ? "   ALREADY RECORDED — append skipped"
           : ""),
     );
-    for (const [col, label, value] of approvalCells(record, leaveDays)) {
+    for (const [col, label, value] of approvalCells(record, leaveDays, eur)) {
       console.log(
         value === null
           ? `    ${col}${appendRow}  ${label.padEnd(14)} — NOT WRITTEN (yours)`
@@ -428,7 +534,7 @@ const main = async () => {
 
       // --- Approvals row: one cell at a time, each verified. ---
       if (needsApproval && alreadyRecorded === null) {
-        const cells = approvalCells(record, leaveDays)
+        const cells = approvalCells(record, leaveDays, eur)
           .filter(([, , v]) => v !== null && String(v) !== "")
           .map(([col, label, value]) => ({ col, label, value }));
         cells.push({ col: "J", label: "Date Approved", value: today() });
@@ -535,7 +641,7 @@ const main = async () => {
           `A${appendRow}:J${appendRow}`,
         ),
       )[0] ?? [];
-    const want = approvalCells(record, leaveDays).map(([, , v]) =>
+    const want = approvalCells(record, leaveDays, eur).map(([, , v]) =>
       v === null ? "" : String(v),
     );
     want.push("", today());

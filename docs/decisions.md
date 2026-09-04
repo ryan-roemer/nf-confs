@@ -23,6 +23,295 @@ re-doing. Those are the entries that actually improve the skill.
 
 ## Entries
 
+### 2026-09-03 — gviz silently deleted 35 cells, and I reported one as "not given"
+
+**This is the worst class of bug this repo can have, so it gets the long entry.**
+
+**Situation:** Ticino Data Conference 2026 (row 110, Dario Scanferlato). I
+reported "travel requested but **no estimate given**" and asked Ryan for the
+figure from scratch. Ryan already knew the answer was there:
+`<100 EUR (if allowed to use my own car)`.
+
+**Cause — not a parser bug, a _reader_ bug.** `probe.js` read each tab as one
+whole-tab gviz request. **gviz infers a column type from the data in the
+requested range and DISCARDS every cell it cannot coerce, returning blank.** The
+travel-cost column is mostly bare numbers, so gviz typed it `number` and deleted
+the text value before any parser saw it. `probe.js` already knew this — it reads
+the _header_ as a single-row range with a comment explaining exactly this
+behaviour — and nobody applied the same reasoning one line down to the body.
+
+**Why it is the worst class:** a dropped cost estimate is byte-identical to an
+empty one. `classifyCost` returned `{empty: true, needsRyan: false}`, which the
+workflow reads as _nothing was requested_. So the failure mode is a silent
+downgrade of "ask Ryan" into "no ask" — the exact inversion of the ⛔ rule — on
+money. Two of the deleted values were **`£100` and `£150`**: currency
+conversions, which are Ryan's alone, reported as blanks.
+
+**Fix:** `fetchRowsIndividually` + `repairDroppedCells` in `probe.js`. After the
+whole-tab read, every email-bearing row is re-read as a single-row range and
+blank cells are filled from it. Default on; `--no-repair` opts out and prints a
+warning that a dropped cost now looks empty. Verified live: **113/113 rows
+paired on both main tabs, 35 cells recovered** (travel 7, hotel 8, attendee
+counts 16, TravelPerk/Expensify 4).
+
+**Pairing is positional, and that detail matters.** My first blast-radius
+measurement joined live rows to saved rows on `(email, name)` and reported
+**85** dropped cells. That number was wrong. Dario has **two** `Ticino Data
+Conference 2026` rows, so `(email, name)` is not a key — the map collapsed them
+and diffed row 108 against row 113, inventing drops that were really
+collisions. The real figure is 35. Position within the email-bearing
+subsequence is the only stable join, and a count mismatch now abstains rather
+than guesses.
+
+**Rules, and these are the durable part:**
+
+1. **A read that can silently drop data must be able to say so.** Every probe
+   run now prints the recovered count and names the tabs it could not repair.
+   `Recovered 0 cells` and `NOT REPAIRED` are different statements and must
+   look different.
+2. **Never calibrate a parser on data from a lossy reader.** `classifyCost`
+   carried the comment "51 non-empty values … none is in another currency". It
+   was measured on already-degraded CSVs; the `£` values had been deleted before
+   they were counted. The docstring now says so, so nobody re-derives it.
+3. **An identity join needs a real key.** Confirm uniqueness before joining on
+   one, or join by position.
+
+**Status:** graduated to `scripts/sheet/probe.js` and `scripts/sheet/lib/rows.js`.
+
+### 2026-09-03 — `CFP Details` only when the CFP is actually open
+
+**Situation:** Ticino's sessionize link existed only on the superseded July
+submission. I had left `CFP Details` blank under the "newer entry wins, don't
+carry values across" rule and asked.
+
+**Decision (Ryan):** _"If sessionize link indicates CFP is open, then include,
+otherwise omit."_
+
+**Applied:** fetched <https://sessionize.com/ticino-data-conference-2026/> —
+_"Call for Speakers is closed. Submissions are no longer possible."_ So
+**omitted**. Note the trap: the organiser's own blurb further down still reads
+"The call for speakers is open until July 31st, 2026", which is stale prose, not
+status. Read Sessionize's **status banner**, not the description.
+
+`CFP Opens` / `CFP Deadline` left blank on the same logic — a closed CFP on a
+confirmed speaking record carries no useful date.
+
+**Rule:** a CFP link is included only when the CFP is open on a live read of it.
+This generalises past Sessionize: check the status, not the copy.
+**Status:** open — promote to `workflow.md` if it holds a third time.
+
+**Ticino outcome:** Notion page created (`3d19aa50dea281028168c3a9b38659da`),
+**exactly one**, all 12 properties verified on an independent read-back, with
+`Owner`, `Tags`, `Related / CFP` and all three CFP fields confirmed null. Sheet:
+`2026 Approvals` row 19 and `Speaking` L113 — **11/11 cells verified on both
+paths, first try, no FAILs**. `Link` is `https://tconf.ch/en/` at Ryan's
+instruction. Travel €100 supplied via the new `--travel-eur` flag, which had
+refused the run without it.
+
+### 2026-09-03 — my CDP driving was the real failure, not CDP
+
+**Ryan:** _"the CDP **would** have worked but you kept mucking up the tabs and
+ability to even use CDP. That's my concern. The API is the better choice here,
+but you should have been able to do CDP."_
+
+He is right, and the four errors were all mine, all avoidable:
+
+1. **Wrong target, never asserted.** `requireHostTab(/docs\.google\.com$/)` then
+   `pages[0]` — which was a Google **Docs** tab, not the spreadsheet. The
+   in-page `fetch` then failed as a bare `TypeError: Failed to fetch`, which
+   reads like a network or auth fault and is really "wrong tab". `pickTarget`
+   in `cdp-eval.js` already guarded this by preferring `/spreadsheets/d/`;
+   `requireHostTab` does not, and its JSDoc did not say so.
+2. **I blocked my own navigation.** `await response.text()` inside a
+   `page.on("response")` handler during `goto` stalls the navigation. I read the
+   resulting 90s timeout as "Notion is slow".
+3. **Guessed selectors.** `input[placeholder*="search"]` on Notion, which
+   renders no such element. Never queried first to see what was there.
+4. **A 60-iteration scroll loop that never checked it was scrolling.** It moved
+   the wrong container, collected 37 emails, and reported a confident zero.
+
+**The common fault is the one worth keeping:** I never verified a target or a
+selector before using it, and when a step failed I rewrote the script instead of
+diagnosing the failure. Re-running a call that structurally cannot answer is not
+persistence.
+
+**Fix:** `requirePage(browser, {hostRe, urlIncludes, what})` in `cdp.js` —
+selects a page by what it actually holds, and **throws with the tab listing**
+when the match is empty or not unique rather than guessing. Its doc comment
+carries the other three footguns. Demonstrated on the live browser: of 3
+host-matched tabs, `pages[0]` was the Docs tab and `requirePage` returned the
+workbook, after which the in-page gviz fetch returned row 113 at HTTP 200.
+
+**Rule:** never take `pages[0]`. Match on the document, assert uniqueness, and
+prove a loop is doing something before iterating.
+**Status:** graduated to `scripts/shared/cdp.js` (`requirePage`).
+
+### 2026-09-03 — speaker lookup is `search`, not `get_users` (supersedes the two entries below)
+
+**Situation:** Ticino / Dario Scanferlato. `get_users` returned nothing for
+`dario.scanferlato@nearform.com`, `@thenearformway.com`, `Scanferlato`, `Dario`,
+`Ruben`, the full display name, and its own unfiltered `page_size: 100` listing —
+where he belongs alphabetically between "Danny Hunn" and "Darko Pranjic". A
+control member resolved on the same call. I reported it as blocked and asked
+Ryan for the id.
+
+**Ryan's correction:** _"His email **is** dario.scanferlato@thenearformway.com
+for guests NFW. You should have found that."_ He pointed at the Notion people
+directory, where guests are visible once the members-only filter is off.
+
+**The actual answer, and it is one call:**
+
+```
+search(query: "dario.scanferlato@nearform.com", query_type: "user")
+  → user://351d872b-594c-8174-9038-00027f076330
+    "Dario Ruben Scanferlato"  dario.scanferlato@thenearformway.com
+```
+
+`notion-search` with `query_type: "user"` **sees guests**, and it maps the
+sheet's `@nearform.com` address onto the guest account by itself. A bare
+surname works too. It returns id, display name and true email in one shot, so it
+is the confirmation step as well as the lookup.
+
+**What I did wrong, and it is the part worth keeping.** I had already been told
+the guest domain, and instead of reaching for a different _tool_ I re-ran the
+same failing one with more query spellings, then spent four attempts scraping
+the directory over CDP — which cannot work: the page is Notion-managed
+(`restricted_resource` to `fetch`), virtualised in the browser, and
+members-filtered by default. Ryan called it mid-task: _"you're doing the same
+thing over and over."_ He was right, and the tell was there after lookup two.
+
+**Rules:**
+
+1. **Use `search` + `query_type: "user"` for every speaker lookup.** One call,
+   the sheet's email as-is. `get_users` is not for this and never was.
+2. **Two failures of the same call is the signal to change tool, not query.**
+   Re-running a call that structurally cannot answer is not persistence.
+3. **Don't scrape a Notion-managed surface**, and never change a shared view's
+   filter to read something — that edits what the whole team sees.
+
+**Status:** graduated to `workflow.md` ("`Who`: look speakers up with `search`")
+and `SKILL.md` step 5. **Supersedes** the 2026-09-03 two-domain entry and the
+guest-name-by-rendered-chip workaround below — those described a constraint that
+only existed because the wrong tool was being used.
+
+### 2026-09-03 — the write path was accepting budgets on Ryan's behalf
+
+**Situation:** found by running the Ticino dry run right after teaching
+`classifyCost` about hedged figures. `approvalCells` wrote
+`record.ask.travelCost.amount` straight into column D, so the new hint of `100`
+from `<100 EUR (if allowed to use my own car)` appeared as the approved Travel
+figure — while `F Total` stayed **blank**, because `ask.total` is null whenever
+either side needs Ryan. A filled Travel beside an empty Total, from a number
+Ryan had never approved.
+
+It happened to match the €100 he chose, which is exactly what makes it worth
+logging: the output was right and the mechanism was wrong.
+
+**Fix:** `resolveCost` + `unresolvedCosts` in `write.js`. A cost with
+`needsRyan` is never written from the parser's reading — the run **refuses, dry
+run included**, naming the raw value, the reason, and the flag. `--travel-eur N`
+/ `--hotel-eur N` supply the figure, mirroring `--leave-days`. `Total` is now
+derived from the figures actually being written.
+
+**Rules:**
+
+1. **Refuse on the dry run too.** The dry run is what Ryan approves from, so a
+   figure he never supplied appearing there is the same error one step earlier.
+2. **A parsed hint must never become a default.** It is printed as "reads as
+   100, but that is a hint, not a price".
+3. **The tool enforces the ⛔ rules, not my diligence.** Four things are Ryan's
+   alone; two of them are cost figures, and the script now makes them
+   unwritable without him.
+
+**Status:** graduated to `scripts/sheet/write.js` and `SKILL.md` step 6.
+
+### 2026-09-03 — a hedged figure is Ryan's call, not a number to accept
+
+**Situation:** the recovered value was `<100 EUR (if allowed to use my own
+car)` — a conditional maximum, not a price.
+
+**Decision (Ryan):** "let's just call it 100 EURO".
+
+**Rule:** `classifyCost` now recognises **hedges** — a bound (`<100`, `up to
+80`, `max`), an approximation (`~`, `about`, `around`), a range (`100-150`,
+`80 / 100`), or a condition (`if`, `depends`) — and sets `needsRyan` **even when
+a clean number falls out**, carrying the number only as a stated starting point.
+Accepting a budget is Ryan's, so a hedge must never self-resolve. It also
+recognises an explicit **decline** (`I don't need it, I'll be online`,
+`Online event`, `N/A`) as a real 0 rather than a stop, which is the opposite
+error and just as worth avoiding: 4 cells, previously 2 false stops.
+
+A malformed number like `1.500,50` deliberately reports **no** hint — a wrong
+number beside a warning invites a glance instead of a read.
+**Status:** graduated to `scripts/sheet/lib/rows.js`.
+
+### 2026-09-03 — the same person submitted the same conference twice
+
+**Situation:** Dario submitted Ticino Data Conference 2026 on **7 Jul** as
+"Suggest an event for Nearform to **sponsor**" (start 17/10/2026, travel `120`)
+and again on **24 Aug** as "**Speak** at an event" (start 30/10/2026). They
+disagreed on the date, the website and the cost. Only the second is in the queue,
+because the first is not a speaking engagement.
+
+**Decision (Ryan):** **the newer entry wins.** He expects this to be
+"incredibly rare".
+
+**Rule:** later submission supersedes earlier for the same speaker + conference.
+Report the older one so he can see what changed; do **not** carry values across
+from it — the `120` in the July row is not evidence for the August row's cost.
+**Do not build duplicate detection** — same lesson as the 2026-08-28 audit
+entry: measure the class before building machinery for it, and this class has
+one member. Report it when the queue surfaces it, nothing more.
+
+**The conference page settled the date**, per the step-4 rule that `Link` beats
+the sheet: <https://tconf.ch/en/> states "30 October 2026" four times. Sheet and
+page agreed, so no ⛔ escalation.
+**Status:** one-off — no rule beyond "newer wins".
+
+### 2026-09-03 — missing Line Manager / Technical Director
+
+**Situation:** Dario's form named only **Rob Harber**, in the _Head of Delivery_
+slot. Line Manager and Technical Director were blank — and the form asks for the
+line manager specifically when leave is requested. I re-read the row cell-by-cell
+to confirm the blanks were real and not the gviz drop above.
+
+**Decision (Ryan):** flagging it was right; **Rob alone is sufficient here.**
+**Rule:** flag missing approver slots, never infer who fills them. Whether one
+named approver suffices is Ryan's call each time.
+**Status:** open — promote if it recurs a third time.
+
+### 2026-09-03 — new step 7: the speaker email
+
+**Situation:** Ryan asked for a copy-pasteable raw markdown email to send the
+speaker, offered as an option rather than produced every time — he sends it for
+some entries and not others.
+
+**Decision (Ryan):** added to `SKILL.md` as **step 7**, with his template
+verbatim and explicit fill rules for the three budget variants (travel + hotel /
+travel only / hotel only / neither, which drops the TravelPerk paragraph
+entirely), the no-leave case, and empty supervisor slots.
+
+**Rule:** offer it, never assume it. **Never invent an email address** — the form
+gives supervisor names only, so an unknown address is written
+`Name <ADDRESS TO CONFIRM>`. Requests in the speaker's `Additional comments:`
+(Dario asked for feedback on his presentation) are not covered by the template
+and go to Ryan separately.
+**Status:** graduated to `SKILL.md` step 7.
+
+### 2026-09-03 — a "graduated" entry in this log was not actually in the code
+
+**Situation:** the tune-up note below records that `pending.js`'s Approvals-skip
+line was fixed to state the fact the decision was made on. The code still read
+`ask none — "without requesting support or swag"`. The fix had been described
+here but never landed.
+
+**Rule:** this log records what Ryan decided; it is **not** evidence about the
+current state of the code. Verify a "graduated" claim against the file before
+relying on it — as CLAUDE.md already says about stated facts that no longer
+match the repo. Fixed now, with the reasoning in a comment beside the line so it
+does not regress a third time.
+**Status:** graduated to `scripts/sheet/pending.js`.
+
 ### 2026-09-03 — `--leave-days`: recording leave the form never captured
 
 **Situation:** Adam Barrett's Saskatchewan Startup Summit submission answered
