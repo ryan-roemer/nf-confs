@@ -62,25 +62,48 @@ Deadline`, date ≥ today. Effectively the existing answer to "who is speaking
 
 ## Google Sheet: Event Speaking Program intake
 
-**Verified 2026-08-28** by exact per-tab `gviz` CSV read through the signed-in
-conference Chrome (`npm run sheet:probe -- --save`). This supersedes an earlier
-pass via the Drive connector, which undercounted every tab.
+**Counts last verified 2026-09-03** by exact per-tab `gviz` CSV read through the
+signed-in conference Chrome (`npm run sheet:probe -- --save`), with the row-wise
+repair pass on. This supersedes an earlier pass via the Drive connector, which
+undercounted every tab.
+
+⚠️ **These are a snapshot of a live workbook and go stale as submissions land.**
+Read them as "the shape of each tab", not as current totals — the numbers below
+moved between 2026-08-28 and 2026-09-03 and will move again. Anything that
+depends on an exact count must read it live, not from here. The table is
+date-stamped so a mismatch reads as staleness rather than as a broken read.
 
 - File: `1kzqKVEthPZgV-NvE7P9GoAyKgEOHM1_cU7btRAsJMF8`
 - Six tabs, all six read as distinct content.
 
 | #   | Tab                                    | Lines | Real data rows          | Cols |
 | --- | -------------------------------------- | ----- | ----------------------- | ---- |
-| 0   | `Form Responses 1`                     | 116   | **112**                 | 47   |
-| 1   | `Speaking Events`                      | 1694  | **112**                 | 33   |
-| 2   | `2026 Approvals`                       | 13    | — (layout, not a table) | 15   |
+| 0   | `Form Responses 1`                     | 118   | **113**                 | 47   |
+| 1   | `Speaking Events`                      | 1694  | **113**                 | 33   |
+| 2   | `2026 Approvals`                       | 19    | — (layout, not a table) | 15   |
 | 3   | `2025 Approvals`                       | 24    | — (layout, not a table) | 15   |
 | 4   | `Detailed Approval Records [Form:uKs]` | 1     | **0** (header only)     | 69   |
-| 5   | `Swag Requests`                        | 8     | 7                       | 28   |
+| 5   | `Swag Requests`                        | 12    | 7                       | 28   |
+
+"Real data rows" counts rows carrying an email, which is the pipeline's own test
+for a real row — `Speaking Events` has formulas dragged ~1600 rows past the data
+(see the traps below), so a non-empty-line count is meaningless there.
 
 ### `Speaking Events` mirrors `Form Responses 1` row for row
 
-112 of 112 rows align on (`Email Address`, `Name of the Event or Conference`).
+113 of 113 rows align on (`Email Address`, `Name of the Event or Conference`),
+re-verified 2026-09-03.
+
+⛔ **That pair aligns the two tabs; it is NOT a unique key.** The same person
+resubmits the same conference — Dario Scanferlato has **two** `Ticino Data
+Conference 2026` rows (2026-07-07 and 2026-08-24), differing in engagement,
+start date, website and cost. Joining anything on `(email, name)` silently
+collapses them and maps one row's values onto the other. **Join by position**
+within the email-bearing subsequence, which is what both tabs are ordered by,
+and what `probe.js`'s repair pass and `records.js`'s mirror check use. A join on
+that pair produced a wrong 85-cell drop count on 2026-09-03; the real figure was 35. If a row must be addressed individually, the `Timestamp` in column 0
+distinguishes resubmissions.
+
 Four rows hold the start date in different _formats_ (`17/10/2026` vs
 `2026-10-17`) but **zero disagree in meaning** — an earlier note here claimed a
 disagreement and was wrong. Ryan norms toward ISO by hand over time, which is

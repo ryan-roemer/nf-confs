@@ -37,6 +37,17 @@ inference gets traded for certainty.
   — say how many of the things you meant to check actually answered. Silent drops
   read as real zeroes. A metric that can abstain must make abstention
   distinguishable from a pass.
+- **Change the tool, not the query.** Two failures of the same call is the signal
+  that it _structurally cannot_ answer — switch approach instead of retrying with
+  more spellings. `get_users` returned nothing for a speaker six ways because it
+  cannot see guests; `search` with `query_type: "user"` answered on the first
+  try. Rewriting a failing script is not diagnosing it, and re-running a call
+  that can't answer is not persistence.
+- **Verify the thing you're about to act on.** Assert the tab is the right
+  document before driving it, query for a selector and log what came back before
+  clicking it, and prove a loop is advancing before iterating it. A wrong target
+  fails with a symptom that looks like something else entirely — a Docs tab
+  mistaken for the workbook surfaces as `TypeError: Failed to fetch`.
 
 ## Ryan runs the browser
 

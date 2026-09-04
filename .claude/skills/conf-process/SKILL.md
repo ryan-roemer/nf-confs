@@ -75,6 +75,30 @@ Write it as `{ fetchedAt, query, pages: [...] }` — the shape is documented at 
 top of `scripts/notion/match.js`. Keep the raw values; the matcher parses the
 JSON-string columns itself.
 
+### ⛔ An empty candidate set needs a control count
+
+**Zero candidates is what authorises a `create`, so it has to be a real zero and
+not a broken query.** They look identical. Before recording `pages: []`, run one
+control query and put its numbers in the `query` field:
+
+```sql
+SELECT count(*) AS total_rows,
+       sum(CASE WHEN lower("Location") LIKE '%<country>%' THEN 1 ELSE 0 END) AS by_place,
+       sum(CASE WHEN lower("Name") LIKE '%<topic>%' THEN 1 ELSE 0 END) AS by_topic
+FROM "collection://28b11369-07e7-4e0a-819c-536fd577f5a2"
+```
+
+A healthy `total_rows` proves the read worked; the other counts probe the series
+from a second angle. On 2026-09-03 this returned 299 rows for Ticino — read
+fine — with 0 Swiss locations and 0 Power BI/Fabric names, which is what made
+"absent" trustworthy.
+
+⚠️ **And check any hit for substring noise.** `LIKE '%tconf%'` matched exactly
+one row: `agen`**`tconf`**`erence.com`, the AI Agent Conference. A host fragment
+short enough to be useful is also short enough to land mid-word — read the
+matched `Link` before believing it, and don't let a false positive talk you out
+of a `create`.
+
 ## Step 3 — match
 
 ```bash
@@ -284,35 +308,57 @@ Other conditionals:
 
 ### Template
 
+<!-- prettier-ignore-start -->
+
+⚠️ **Seven of these are markdown links, and they are the whole point of handing
+Ryan markdown.** Reproduce them exactly; a plain-text copy of this email is a
+broken deliverable. `TravelPerk`, `Expensify` and `Netsuite` are deliberately
+**not** linked — don't add links they never had.
+
+**Canonical source, if this copy ever looks wrong:** Notion → **🙌 2026
+Conference Speaking** (`1589aa50-dea2-80bf-83da-e5951babded4`) → _Templates →
+Approval Email_. `fetch` that page and copy the block rather than retyping it.
+The same page's **Log** section holds every past send, which is the reference
+for how a variant was actually worded.
+
 ```markdown
 TO: [SPEAKER]
 
-CC: `Amy Lavelle <amy.lavelle@nearform.com>`, [ALL OTHER SUPERVISORS]
+CC: `Amy Lavelle <[amy.lavelle@nearform.com](mailto:amy.lavelle@nearform.com)>`, [ALL OTHER SUPERVISORS]
 
 SUBJECT: Event Speaking Request - [INSERT INFO]
 
 Hi [INSERT NAME],
 
-Congrats on being selected to be a Speaker at [INSERT CONFERENCE] on [INSERT DATE]. The event has been added to the Events Calendar. We've reviewed your Event Speaking request and have approved travel and accommodation. I believe that you already have approval for the leave from your line manager, [INSERT LM NAME]. I've also CC'ed in [INSERT TD NAME] to keep in the loop on project timing and [INSERT HOD/GM NAME(S)] for visibility into your being selected to speak!
+Congrats on being selected to be a Speaker at [INSERT CONFERENCE] on  [INSERT DATE]. The event has been added to the [Events Calendar](https://www.notion.so/nearform/Nearform-Events-Hub-8303407e1dc4448ab418ae17ff020390?pvs=4#1ce538b3c5da49b791732092bc10cf63). We’ve reviewed your Event Speaking request and have approved travel and accommodation. I believe that you already have approval for the leave from your line manager, [INSERT LM NAME]. I’ve also CC’ed in [INSERT TD NAME] to keep in the loop on project timing and [INSERT HOD/GM NAME(S)] for visibility into your being selected to speak!
 
-[INSERT LM NAME], please be sure to approve 1 day of Event Speaking leave in Netsuite. [INSERT SPEAKER NAME], if you plan to attend other days, I would invite you to use your Learning Leave as described in the Learning & Development policy.
+[INSERT LM NAME], please be sure to approve 1 day of Event Speaking leave in Netsuite. [INSERT SPEAKER NAME], if you plan to attend other days, I would invite you to use your Learning Leave as described in the [Learning & Development policy](https://www.notion.so/nearform/Learning-and-Development-Policy-aef920d8149041c8a215d1bf0e8b51ad?pvs=4#23166be186ad429f882ea3315419abde).
 
-Please use TravelPerk to book your hotel and travel expenses and Expensify for your meals after your return, see the Event Speaking Program.
+Please use TravelPerk to book your hotel and travel expenses and Expensify for your meals after your return, see the [Event Speaking Program](https://www.notion.so/nearform/Event-Speaking-Program-Pilot-2024-dec14191f3b24737ac4d95a9ac9a561f?pvs=4#8f30d8da426c4e1a908a2fe5ea28fb58).
 
-Upon your return, can you please fill in the Event Feedback Form? This helps us know what events are interesting for next year!
+Upon your return, can you please fill in the [Event Feedback Form](https://forms.gle/AbC5U4QWB38K2Hrn7)? This helps us know what events are interesting for next year! 
 
-Be sure to check out the resources (including a Nearform Speaker's Deck template) on the Speakers Toolkit in Notion. After the conference, we'd love to have you write a short blog post about your experience — something in line with either your talk and reception, or the conference experience itself that you'd like to share with others. There are some example posts linked to from the Speakers Toolkit, if you're looking for inspiration / direction.
+Be sure to check out the resources (including a Nearform Speaker’s Deck template) on the [Speakers Toolkit in Notion](https://www.notion.so/nearform/Speaker-s-Toolkit-c48f04cc32db48ca830b0483d15ca4ec?pvs=4). After the conference, we’d love to have you write a short blog post about your experience — something in line with either your talk and reception, or the conference experience itself that you’d like to share with others. There are some example posts linked to from the Speakers Toolkit, if you’re looking for inspiration / direction.
 
-Finally, if you wish to request swag or other marketing materials, please use the Event Proposal Form with the specifics of what you need, why, and when. Let me know if you have any questions.
+Finally, if you wish to request swag or other marketing materials, please use the [Event Proposal Form](https://forms.gle/JiVu59UovrwC4ryn8) with the specifics of what you need, why, and when. Let me know if you have any questions.
 
 All best,
 
 Ryan
 ```
 
-Leave the template's wording alone otherwise. Requests in the speaker's
+<!-- prettier-ignore-end -->
+
+Leave the template's wording alone otherwise — including the curly apostrophes
+and the double space after "on". Requests in the speaker's
 `Additional comments:` — a review of their slides, say — are **not** covered by
 it; mention them to Ryan separately rather than improvising a paragraph.
+
+**Supervisor addresses come from a lookup, never a guess.** The form gives names
+only; resolve each with `search(query: "<name>", query_type: "user")`, which
+returns the real address (`Rob Harber` → `rob.harber@nearform.com`). Only if
+that returns nothing does the name go in as
+`Name <ADDRESS TO CONFIRM>`.
 
 ## Capturing decisions
 

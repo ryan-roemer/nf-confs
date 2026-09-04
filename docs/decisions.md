@@ -78,6 +78,46 @@ than guesses.
 
 **Status:** graduated to `scripts/sheet/probe.js` and `scripts/sheet/lib/rows.js`.
 
+### 2026-09-03 — the email template has seven links, and I dropped all of them
+
+**Situation:** Ryan pasted the approval-email template into chat. Chat paste
+flattens markdown, so what I received was plain text — and I copied _that_ into
+`SKILL.md` and into Dario's email. Ryan: _"We lost the markdown links that
+should have been in the template."_
+
+**The template is a Notion document, not a chat message.** It lives at
+**🙌 2026 Conference Speaking** (`1589aa50-dea2-80bf-83da-e5951babded4`) →
+_Templates → Approval Email_, and `fetch` on that page returns it with all
+seven links intact. I found it in one search after Ryan pointed at the loss —
+which is one search I could have run before transcribing a document I was told
+existed.
+
+The seven: `mailto:amy.lavelle`, Events Calendar, Learning & Development policy,
+Event Speaking Program, Event Feedback Form, Speakers Toolkit in Notion, Event
+Proposal Form. `TravelPerk`, `Expensify` and `Netsuite` are deliberately
+**unlinked** — don't add links they never had.
+
+**Rule:** when a document exists in a system I can read, **fetch it; never
+transcribe it from chat.** A paste is lossy in ways that are invisible in the
+paste itself — links, smart quotes, whitespace all vanish silently, and the
+result looks correct. This is the same failure shape as the gviz drop above: a
+lossy read whose output is indistinguishable from a clean one.
+
+**Second-order fix:** prettier was also eroding the block, collapsing the
+double space after "on" and the trailing space after "next year!" on every
+`npm run format`. The template is now wrapped in
+`<!-- prettier-ignore-start/end -->`, and a 12-point fidelity check
+(link count, each URL, apostrophes, whitespace, the three deliberate
+non-links) passes after a format run. An instruction to preserve
+whitespace is worthless if the formatter reverses it on the next commit.
+
+**Also:** supervisor addresses now come from
+`search(query: "<name>", query_type: "user")` — the form gives names only, and
+that call returned `Rob Harber → rob.harber@nearform.com`. I had written
+`<ADDRESS TO CONFIRM>` when the lookup was one call away. Placeholder only when
+the lookup genuinely returns nothing.
+**Status:** graduated to `SKILL.md` step 7.
+
 ### 2026-09-03 — `CFP Details` only when the CFP is actually open
 
 **Situation:** Ticino's sessionize link existed only on the superseded July
