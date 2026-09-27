@@ -48,6 +48,28 @@ export const pickTarget = async (hostRe) => {
 };
 
 /**
+ * Bring a page target to the front via the HTTP endpoint. Chrome throttles a
+ * backgrounded tab hard enough that a gviz fetch evaluated inside it can miss
+ * `evalInTab`'s timeout — seen 2026-09-27 as a bare "CDP evaluate timed out"
+ * on a dry run, after a sign-in left the Notion tab in front. Best-effort:
+ * returns false rather than throwing, since the read's own timeout still
+ * reports a real failure.
+ * @param {{id: string}} target
+ * @returns {Promise<boolean>} true when Chrome acknowledged the activation.
+ */
+export const activateTarget = async (target) => {
+  try {
+    const res = await fetch(
+      `http://127.0.0.1:${PORT}/json/activate/${target.id}`,
+      { signal: AbortSignal.timeout(5000) },
+    );
+    return res.ok;
+  } catch {
+    return false;
+  }
+};
+
+/**
  * Run an expression in the tab and return its value.
  * @param {{webSocketDebuggerUrl: string}} target
  * @param {string} expression
@@ -57,7 +79,13 @@ export const evalInTab = (target, expression, timeoutMs = DEFAULT_TIMEOUT_MS) =>
     const ws = new WebSocket(target.webSocketDebuggerUrl);
     const timer = setTimeout(() => {
       ws.close();
-      reject(new Error(`CDP evaluate timed out after ${timeoutMs}ms`));
+      reject(
+        new Error(
+          `CDP evaluate timed out after ${timeoutMs}ms in ${target.url}\n` +
+            `If that tab is backgrounded, Chrome may be throttling it — ` +
+            `front it (activateTarget) and rerun.`,
+        ),
+      );
     }, timeoutMs);
 
     ws.onopen = () =>

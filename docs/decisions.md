@@ -23,6 +23,51 @@ re-doing. Those are the entries that actually improve the skill.
 
 ## Entries
 
+### 2026-09-27 — backgrounded workbook tab, second occurrence, different symptom
+
+**Situation:** Codemotion Milan 2026. `chrome:login` opened a Notion tab and
+Ryan signed in there, leaving the workbook tab in the background. The
+`sheet:write` **dry run** then failed with `CDP evaluate timed out after
+20000ms` — not the worksheet-guard message seen on 2026-09-03.
+**Fix:** `curl -s http://127.0.0.1:9333/json/activate/<workbook targetId>`,
+rerun. Dry run and `--apply` both succeeded first try after it; `--apply`
+verified 11/11 on both paths, no FAILs.
+**Rule:** same as 2026-09-03 — bring the workbook tab to the front before any
+`sheet:write`. The symptom can be a bare CDP timeout, which doesn't mention
+tabs at all.
+**Status:** fix built, same day. The dry-run/verify read path never fronted
+the tab — only the `--apply` session did, later. `write.js` now calls
+`activateTarget` (`scripts/shared/cdp-eval.js`) right after `pickTarget`, the
+evaluate timeout names the tab and the likely cause, and `chrome:status` now
+reports whether the **workbook** tab exists and is visible (the Google host
+check alone passed on a Docs home tab). Note `visibilityState` can read
+`hidden` even when fronted, if the window itself is covered or minimised.
+
+### 2026-09-27 — closed CFP: leave all three CFP fields blank (supersedes 2026-08-28 "record CFP dates")
+
+**Situation:** Codemotion Milan 2026 (row 118, Alfonso Graziano). Sessionize
+showed the CFP closed (opened 2026-04-15, closed 2026-05-15). Two entries here
+disagreed: 2026-08-28 said fill `CFP Opens`/`CFP Deadline` even when closed;
+the 2026-09-03 Ticino entry left them blank because the CFP was closed.
+**Decision (Ryan):** _"Leave out CFP. Fine to leave out if closed already by the
+time I'm processing."_
+**Rule:** if the CFP is closed on a live read at processing time, leave
+`CFP Details`, `CFP Opens` and `CFP Deadline` all blank. This supersedes the
+2026-08-28 "record CFP dates whenever they are determinable" entry, which had
+been marked graduated.
+**Status:** recurring (2nd time, with Ticino). Promote to `workflow.md` on the
+third.
+
+### 2026-09-27 — `Affliation` for a company-run event is the company
+
+**Situation:** Codemotion Milan 2026. Codemotion is a company running its own
+conference series; `Affliation` was null on all three prior Codemotion pages.
+**Decision (Ryan):** `Codemotion`.
+**Rule:** when the organiser is a company running its own event series, the
+company name is the `Affliation`. Consistent with "umbrella over chapter"
+(2026-08-28).
+**Status:** open — first non-GDG instance of the umbrella rule.
+
 ### 2026-09-03 — gviz silently deleted 35 cells, and I reported one as "not given"
 
 **This is the worst class of bug this repo can have, so it gets the long entry.**
@@ -837,6 +882,8 @@ closed. The historical nulls are a gap in attention, not a convention.
 including for a CFP that has already closed. A closed CFP is useful information,
 not noise.
 **Status:** graduated.
+**Superseded 2026-09-27** — a CFP already closed at processing time is left
+blank. See the 2026-09-27 entry.
 
 **Lesson repeated:** this is the second time today a sparse fill rate was read
 as intent and was wrong — `Date Approved` was the first. A field being mostly

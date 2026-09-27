@@ -46,7 +46,7 @@ import {
   readCell,
   writeCell,
 } from "../shared/cdp-session.js";
-import { gvizCsv, pickTarget } from "../shared/cdp-eval.js";
+import { activateTarget, gvizCsv, pickTarget } from "../shared/cdp-eval.js";
 import {
   assertMirrorIntact,
   backfillOf,
@@ -327,6 +327,14 @@ const main = async () => {
   }
 
   const target = await pickTarget(GOOGLE);
+  // Front it before the first read, not just before typing: the gviz reads
+  // below run in this tab too, and a backgrounded tab can time them out.
+  if (!(await activateTarget(target))) {
+    console.log(
+      `  note: could not front the workbook tab — if a read times out, front ` +
+        `it by hand and rerun.\n`,
+    );
+  }
 
   // --- Resolve the true rows. Never trust CSV position. ---
   const formRow = await resolveSheetRow(target, key, FORM_TAB, record);

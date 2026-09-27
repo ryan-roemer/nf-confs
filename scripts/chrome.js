@@ -10,6 +10,7 @@
  */
 
 import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
 
 import {
   CDP_ENDPOINT,
@@ -24,6 +25,7 @@ import {
   TARGET_WARN_THRESHOLD,
   waitForPort,
 } from "./shared/cdp.js";
+import { evalInTab } from "./shared/cdp-eval.js";
 
 const args = process.argv.slice(2);
 const hasFlag = (name) => args.includes(name);
@@ -272,6 +274,51 @@ const status = async () => {
       "\nNotion tab looks identical here — the first real read will say so.",
   );
   if (missing > 0) process.exitCode = 1;
+
+  await reportWorkbook(targets);
+};
+
+/**
+ * The Google host check above passes on any Google tab — a Docs home page
+ * satisfies it. What the sheet write needs is the workbook itself, in front:
+ * Chrome throttles a backgrounded tab enough to time out gviz reads, and a
+ * sign-in on the Notion tab is exactly what backgrounds it (2026-09-03,
+ * 2026-09-27). Advisory: reported, and `sheet:write` fronts it itself.
+ * @param {Array<{type: string, url: string, id: string}>} targets
+ */
+const reportWorkbook = async (targets) => {
+  let key;
+  try {
+    key = JSON.parse(await readFile("config/targets.json", "utf8")).sheet.key;
+  } catch {
+    console.log("\nWorkbook:    not checked — config/targets.json unreadable.");
+    return;
+  }
+  const tabs = targets.filter(
+    (t) => t.type === "page" && t.url.includes(`/spreadsheets/d/${key}`),
+  );
+  if (tabs.length === 0) {
+    console.log(
+      `\nWorkbook:    NO TAB — open it before a sheet write:\n` +
+        `             https://docs.google.com/spreadsheets/d/${key}/edit`,
+    );
+    return;
+  }
+  let visibility;
+  try {
+    visibility = await evalInTab(tabs[0], "document.visibilityState", 5000);
+  } catch {
+    visibility = "unknown (tab did not answer)";
+  }
+  const note =
+    visibility === "visible"
+      ? ""
+      : " — not the front tab, or the window is covered/minimised. " +
+        "sheet:write fronts the tab; if a read still times out, bring the " +
+        "window up";
+  console.log(
+    `\nWorkbook:    ${tabs.length} tab(s); first is ${visibility}${note}`,
+  );
 };
 
 const main = async () => {

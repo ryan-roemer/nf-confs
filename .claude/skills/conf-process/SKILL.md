@@ -125,12 +125,12 @@ second-guess it toward "update".
 For the 🧠 fields, fetch the conference URL and read it. `Link` is the source of
 truth, above the sheet.
 
-| Field                       | What to look for                                                       |
-| --------------------------- | ---------------------------------------------------------------------- |
-| `Affliation`                | organiser / parent foundation / community behind the event             |
-| `CFP Opens`, `CFP Deadline` | often absent even when the CFP is open — leave blank rather than guess |
-| `Audience`                  | refine the sheet's `Audience:` against Notion's option list            |
-| `Location`                  | norm against the conference page **and** how existing rows are written |
+| Field                                      | What to look for                                                                                                                                     |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Affliation`                               | organiser / parent foundation / community behind the event                                                                                           |
+| `CFP Opens`, `CFP Deadline`, `CFP Details` | only while the CFP is open on a live read (Sessionize: the status banner, not the prose). Closed → all three blank. Absent → blank rather than guess |
+| `Audience`                                 | refine the sheet's `Audience:` against Notion's option list                                                                                          |
+| `Location`                                 | norm against the conference page **and** how existing rows are written                                                                               |
 
 If the page contradicts the sheet on year, country or identity — ⛔ stop and ask.
 

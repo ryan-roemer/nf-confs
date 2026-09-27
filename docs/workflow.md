@@ -90,22 +90,22 @@ wrong event — flag to Ryan before proceeding.** Do not reconcile it silently.
 
 ### Field mapping
 
-| Notion property | Source                                                                                                                                                 | Mode                                        |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------- |
-| `Link`          | `Event website`                                                                                                                                        | 🤖 copy · 🧠 sanity-check against the sheet |
-| `Date`          | `Event start date` + `Event duration (in days)` → a range; duration is a number, so compute the end date                                               | 🤖                                          |
-| `Event Type`    | `Event Category` (typically `Technical Conference`) → almost always **`Conference`** for this workflow                                                 | 🤖 default, 🧠 on anything unusual          |
-| `Engagement`    | always **`Speak`** for this workflow                                                                                                                   | 🤖                                          |
-| `Audience`      | `Audience:`, refined against the conference website. Typically `Developers`, `VP Engineering`, `Engineering leaders`                                   | 🧠                                          |
-| `Region`        | start from `Location `, then pick a Notion `Region` option                                                                                             | 🤖 mapping table · 🧠 fallback              |
-| `CFP Details`   | conference website, or `Event Call for Papers (CFP) link (if applicable)`. Often left blank                                                            | 🧠                                          |
-| `Status`        | always **`Confirmed`** for this workflow. May overwrite a previous value                                                                               | 🤖                                          |
-| `Who`           | match `Email Address` → Notion person, **two domains** — see below. **Multiple speakers per event happen. Never remove existing speakers — only add.** | 🤖 exact lookup by email                    |
-| `Location`      | start from `Location `, then norm against the conference page **and against how existing rows are written** — not standardised                         | 🧠                                          |
-| `Affliation`    | figure out from the conference page (note Notion's spelling)                                                                                           | 🧠                                          |
-| `CFP Opens`     | from the website / CFP link if determinable. Often not, even when the CFP is open                                                                      | 🧠 best-effort                              |
-| `CFP Deadline`  | from the website / CFP link if determinable                                                                                                            | 🧠 best-effort                              |
-| `Organiser`     | always **`Tech / Speaker Programme`** for this workflow                                                                                                | 🤖                                          |
+| Notion property | Source                                                                                                                                                                              | Mode                                        |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| `Link`          | `Event website`                                                                                                                                                                     | 🤖 copy · 🧠 sanity-check against the sheet |
+| `Date`          | `Event start date` + `Event duration (in days)` → a range; duration is a number, so compute the end date                                                                            | 🤖                                          |
+| `Event Type`    | `Event Category` (typically `Technical Conference`) → almost always **`Conference`** for this workflow                                                                              | 🤖 default, 🧠 on anything unusual          |
+| `Engagement`    | always **`Speak`** for this workflow                                                                                                                                                | 🤖                                          |
+| `Audience`      | `Audience:`, refined against the conference website. Typically `Developers`, `VP Engineering`, `Engineering leaders`                                                                | 🧠                                          |
+| `Region`        | start from `Location `, then pick a Notion `Region` option                                                                                                                          | 🤖 mapping table · 🧠 fallback              |
+| `CFP Details`   | conference website, or `Event Call for Papers (CFP) link (if applicable)`. **Blank if the CFP is closed** on a live read at processing time — read the status banner, not the prose | 🧠                                          |
+| `Status`        | always **`Confirmed`** for this workflow. May overwrite a previous value                                                                                                            | 🤖                                          |
+| `Who`           | match `Email Address` → Notion person, **two domains** — see below. **Multiple speakers per event happen. Never remove existing speakers — only add.**                              | 🤖 exact lookup by email                    |
+| `Location`      | start from `Location `, then norm against the conference page **and against how existing rows are written** — not standardised                                                      | 🧠                                          |
+| `Affliation`    | figure out from the conference page (note Notion's spelling)                                                                                                                        | 🧠                                          |
+| `CFP Opens`     | from the website / CFP link if determinable, **only while the CFP is open**. Closed → blank                                                                                         | 🧠 best-effort                              |
+| `CFP Deadline`  | from the website / CFP link if determinable, **only while the CFP is open**. Closed → blank                                                                                         | 🧠 best-effort                              |
+| `Organiser`     | always **`Tech / Speaker Programme`** for this workflow                                                                                                                             | 🤖                                          |
 
 Properties this workflow never touches: `Owner`, `Tags`, `Related / CFP`.
 
