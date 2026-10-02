@@ -64,7 +64,9 @@ because some organisers put the year in the URL and some don't:
 SELECT url, "Name", "Link", "date:Date:start" AS d_start,
        "date:Date:end" AS d_end, "Event Type" AS etype, "Status",
        "Engagement", "Who", "Location", "Region", "Affliation",
-       "Organiser", "Audience", "Tags", "CFP Details"
+       "Organiser", "Audience", "Tags", "CFP Details",
+       "date:CFP Opens:start" AS cfp_opens,
+       "date:CFP Deadline:start" AS cfp_deadline
 FROM "collection://28b11369-07e7-4e0a-819c-536fd577f5a2"
 WHERE lower("Link") LIKE '%<host-fragment>%'
    OR lower("Name") LIKE '%<name-fragment>%'
@@ -150,6 +152,12 @@ Set only these, and leave everything else alone:
 | `Audience`, `Region`, `Location`, `Affliation`, `CFP Details`, `CFP Opens`, `CFP Deadline` | per steps 3–4                                        |
 
 **Never touch** `Owner`, `Tags`, `Related / CFP`.
+
+⚠️ **A closed CFP clears on an `update` too.** If the existing page carries
+`CFP Details`, `CFP Opens` or `CFP Deadline` and the CFP is closed on a live
+read, propose clearing all three. Check `cfp_opens`/`cfp_deadline` from the
+candidate query, not just `CFP Details`. Seen on AGNTCon NA 2026 (2026-10-01):
+the stale deadline only turned up on read-back.
 
 ⚠️ **`Who` is additive.** Multiple speakers per event is normal. Read the
 existing value, append, write the union. Removing a speaker is data loss.

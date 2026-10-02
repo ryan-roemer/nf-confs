@@ -13,7 +13,8 @@
  *
  * candidates.json shape: { fetchedAt, query, pages: [ { url, Name, Link,
  *   d_start, d_end, etype, Status, Engagement, Who, Location, Region,
- *   Affliation, Organiser, Audience, Tags, "CFP Details" } ] }
+ *   Affliation, Organiser, Audience, Tags, "CFP Details", cfp_opens,
+ *   cfp_deadline } ] }
  */
 
 import { readFile } from "node:fs/promises";

@@ -23,6 +23,32 @@ re-doing. Those are the entries that actually improve the skill.
 
 ## Entries
 
+### 2026-10-01 — closed-CFP rule applied to an existing page: clear stale CFP values on update
+
+**Situation:** AGNTCon + MCPCon 2026 North America (row 120, Ryan's own entry).
+The page (`3499aa50dea280bb83d9f4f14ff68554`) already existed with every field
+set, including `CFP Details` = the Sessionize link and `CFP Deadline` =
+2026-06-07. Sessionize read live: _"Call for Proposals is closed."_ Ryan's
+`Who` was already present, so nothing else needed writing.
+**Decision (Ryan):** _"Go ahead and do all the things you should do"_, after I
+proposed clearing `CFP Details` under the closed-CFP rule.
+**Applied:** cleared `CFP Details` and then `CFP Deadline`. I asked about the
+first and not the second; the deadline only turned up in the read-back. Both
+come under the same rule. `CFP Opens` was already null.
+**Rule:** the closed-CFP rule (2026-09-27, already in `workflow.md`) applies on
+an `update` as well as a `create`: a pre-existing CFP value on a page whose CFP
+is closed at processing time gets cleared. Read all three CFP fields **before**
+proposing the change. The matcher's candidate query doesn't select
+`CFP Opens`/`CFP Deadline`, which is why the deadline surfaced late.
+**Status:** open (first time on an update).
+
+Same session: DevFest Venice 2026 (row 119, Luca Del Puppo) → **create**, no
+prior years, page `3ec9aa50dea2811daf63f08776cba44d`. Exactly one page on
+read-back, all properties as planned. Both sheet writes: `Speaking` L119 and
+L120, verified on both paths first try, no FAILs. No Approvals rows (neither
+entry asked for leave, travel or hotel). The workbook tab was missing from the
+conference Chrome; opening it via `PUT /json/new?<url>` on 9333 was enough.
+
 ### 2026-09-27 — backgrounded workbook tab, second occurrence, different symptom
 
 **Situation:** Codemotion Milan 2026. `chrome:login` opened a Notion tab and
