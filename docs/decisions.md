@@ -23,6 +23,39 @@ re-doing. Those are the entries that actually improve the skill.
 
 ## Entries
 
+### 2026-10-08 — a one-off GDG chapter afternoon event is a `Conference`
+
+**Situation:** Catania Mobile Day (row 121, Rosario Terranova). A single
+3-hour GDG Catania event, ~30 RSVPs, sheet category "Technical conference or
+meet-up". Notion's other GDG options: `Meetup series`, used on the GDG
+Venice / Treviso / Torino pages, which are recurring chapter-meetup pages.
+**Decision (Ryan):** `Conference`.
+**Rule:** `Meetup series` is for a page that tracks a recurring meetup; a
+one-off named event, however small, is `Conference`.
+**Status:** open — one instance.
+
+Also seen: `Affliation` on GDG events is inconsistent in Notion — DevFest Roma
+2026 and DevFest Venice 2026 carry chapter names (`GDG Roma Città`,
+`GDG Venezia`) against the 2026-08-28 umbrella rule. Applied `GDG` per the rule;
+the two outliers were left alone.
+
+### 2026-10-08 — workbook tab closed mid-`--apply`: timeout, then a clean re-apply
+
+**Situation:** Catania Mobile Day. The workbook tab was closed during
+`sheet:write --apply`; the run died with `CDP Runtime.evaluate timed out after
+20000ms` right after "editor ready", before the identity check. Reopening via
+`PUT /json/new?<workbook url>` and verifying immediately gave
+`TypeError: Failed to fetch` — the tab was still loading (title empty).
+**Decision:** none needed. Waited for the tab title to read "Event Proposal
+Form (Responses)", fronted it with `/json/activate/<id>`, ran `--verify`
+twice — `L121 = FALSE` both times, so nothing had been typed — then re-ran
+`--apply`, which passed on both paths.
+**Rule:** a timeout before "identity confirmed" means nothing was written.
+Prove that with two `--verify` reads, then re-apply; the expected-content guard
+makes the re-apply safe. A freshly opened tab is not ready until its title is
+the workbook's.
+**Status:** open — first instance.
+
 ### 2026-10-01 — closed-CFP rule applied to an existing page: clear stale CFP values on update
 
 **Situation:** AGNTCon + MCPCon 2026 North America (row 120, Ryan's own entry).
@@ -55,7 +88,7 @@ conference Chrome; opening it via `PUT /json/new?<url>` on 9333 was enough.
 Ryan signed in there, leaving the workbook tab in the background. The
 `sheet:write` **dry run** then failed with `CDP evaluate timed out after
 20000ms` — not the worksheet-guard message seen on 2026-09-03.
-**Fix:** `curl -s http://127.0.0.1:9333/json/activate/<workbook targetId>`,
+**Fix:** `curl -s http://127.0.0.1:9311/json/activate/<workbook targetId>`,
 rerun. Dry run and `--apply` both succeeded first try after it; `--apply`
 verified 11/11 on both paths, no FAILs.
 **Rule:** same as 2026-09-03 — bring the workbook tab to the front before any
@@ -553,7 +586,7 @@ throttles a backgrounded tab, so the Name Box navigation did not complete inside
 `gotoCell`'s 600 ms wait, and the guard correctly refused.
 
 **Fix, and what not to do:** activate the spreadsheet tab first —
-`curl -s http://127.0.0.1:9333/json/activate/<targetId>` — then rerun. The
+`curl -s http://127.0.0.1:9311/json/activate/<targetId>` — then rerun. The
 retry wrote first try, no FAILs, verified on both paths. **Do not lengthen the
 600 ms wait to make this go away**; the guard is the 2026-08-28
 wrong-worksheet protection and the timeout is what makes it bite.

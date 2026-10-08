@@ -14,7 +14,7 @@
 const DEFAULT_TIMEOUT_MS = 20000;
 
 /** CDP endpoint, matching scripts/shared/cdp.js. */
-const PORT = Number(process.env.NF_CONFS_CDP_PORT) || 9333;
+const PORT = Number(process.env.NF_CONFS_CDP_PORT) || 9311;
 
 /**
  * Find one open page target whose hostname matches.

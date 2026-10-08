@@ -190,7 +190,7 @@ Each phase ends at something runnable, with a checkpoint for you.
 
 ## Decisions on the record
 
-- **Separate Chrome on port 9333, profile `~/.nf-confs/chrome-profile`.** Chrome
+- **Separate Chrome on port 9311 (was 9333 until 2026-10-08, when another project took it), profile `~/.nf-confs/chrome-profile`.** Chrome
   enables the debug port only on a fresh process per user-data-dir, so a second
   profile is the only way to keep the everyday Chrome (9222) usable. Automation
   with write access to a team Notion workspace also shouldn't run in a browser

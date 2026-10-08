@@ -11,7 +11,7 @@
  *     pointed at a browser full of unrelated signed-in tabs.
  *
  * Hence a dedicated profile dir and a dedicated port. Override the port with
- * NF_CONFS_CDP_PORT if 9333 is ever taken.
+ * NF_CONFS_CDP_PORT if 9311 is ever taken.
  */
 
 import { chromium } from "playwright";
@@ -19,7 +19,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 /** Debug port for the conference Chrome. Not 9222 — that's the everyday one. */
-export const CDP_PORT = Number(process.env.NF_CONFS_CDP_PORT) || 9333;
+export const CDP_PORT = Number(process.env.NF_CONFS_CDP_PORT) || 9311;
 
 export const CDP_ENDPOINT = `http://127.0.0.1:${CDP_PORT}`;
 
@@ -109,6 +109,61 @@ export const fetchVersion = async (timeoutMs = 3000) => {
     return null;
   }
 };
+
+/**
+ * Say what is on the debug port: Chrome, nothing, or something else.
+ * `fetchVersion` returns null for both of the last two, but they need opposite
+ * fixes — start Chrome, or move off a port another process holds. On
+ * 2026-10-08 a WebSocket server from another project sat on 9333 and answered
+ * `426 Upgrade Required`, which read as "nothing answered".
+ * @returns {Promise<{state: "chrome", version: object}
+ *   | {state: "closed"}
+ *   | {state: "foreign", detail: string}>}
+ */
+export const probePort = async (timeoutMs = 3000) => {
+  let res;
+  try {
+    res = await fetch(`${CDP_ENDPOINT}/json/version`, {
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (err) {
+    if (err.cause?.code === "ECONNREFUSED") return { state: "closed" };
+    return {
+      state: "foreign",
+      detail: `accepted the connection but did not answer (${err.cause?.code ?? err.name})`,
+    };
+  }
+
+  const status = `HTTP ${res.status} ${res.statusText}`.trim();
+  if (!res.ok) return { state: "foreign", detail: status };
+  try {
+    const version = await res.json();
+    if (version?.Browser || version?.webSocketDebuggerUrl) {
+      return { state: "chrome", version };
+    }
+    return {
+      state: "foreign",
+      detail: `${status}, JSON with no Browser field`,
+    };
+  } catch {
+    return { state: "foreign", detail: `${status}, not JSON` };
+  }
+};
+
+/**
+ * Error text for "the debug port is held by something that is not Chrome".
+ * @param {string} detail what the port answered, from `probePort`
+ * @returns {string}
+ */
+export const foreignPortMessage = (detail) =>
+  `Port ${CDP_PORT} is in use, but not by Chrome: ${detail}.\n` +
+  `\n` +
+  `Another process holds it, so a Chrome launched here cannot bind it. Find\n` +
+  `the holder:\n` +
+  `  lsof -nP -iTCP:${CDP_PORT} -sTCP:LISTEN\n` +
+  `\n` +
+  `Then stop it, or move this tooling to a free port with NF_CONFS_CDP_PORT\n` +
+  `(or change the default in scripts/shared/cdp.js).`;
 
 /**
  * Open a blank tab via the HTTP endpoint (PUT since Chrome 111). Used to
@@ -316,8 +371,13 @@ export const connectToChrome = async () => {
   } catch (err) {
     // Three failures look alike from Playwright's error but need different
     // fixes, so name them apart rather than guessing at the most common.
-    const version = await fetchVersion();
-    if (!version) throw new Error(notRunningMessage(err.message));
+    const probe = await probePort();
+    if (probe.state === "foreign") {
+      throw new Error(foreignPortMessage(probe.detail));
+    }
+    if (probe.state === "closed") {
+      throw new Error(notRunningMessage(err.message));
+    }
 
     const targets = await fetchTargets();
     if (!targets || targets.length === 0) {

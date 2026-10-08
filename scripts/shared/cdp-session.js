@@ -45,7 +45,7 @@ export class CdpSession {
    */
   static async open(
     hostRe,
-    port = Number(process.env.NF_CONFS_CDP_PORT) || 9333,
+    port = Number(process.env.NF_CONFS_CDP_PORT) || 9311,
   ) {
     const res = await fetch(`http://127.0.0.1:${port}/json/list`, {
       signal: AbortSignal.timeout(5000),

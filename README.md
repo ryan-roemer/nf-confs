@@ -29,7 +29,7 @@ It is deliberately a separate Chrome from your everyday one:
 
 - Chrome only enables `--remote-debugging-port` on a fresh process per
   `--user-data-dir`, so a second profile is the only way to have both at once.
-- Your everyday Chrome keeps port **9222**. This one takes **9333**
+- Your everyday Chrome keeps port **9222**. This one takes **9311**
   (override with `NF_CONFS_CDP_PORT`).
 - Profile dir: `~/.nf-confs/chrome-profile`. Cookies persist, so signing in is a
   one-off. No session restore, so a relaunch always comes back with zero stray

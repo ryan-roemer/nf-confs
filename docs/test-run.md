@@ -21,7 +21,7 @@ the full context, so bring the report back and do the write there.
   session, for that specific entry.** Dry-run output first, every time.
 - `.data/` is gitignored and holds real emails, costs and leave. Don't paste it
   anywhere.
-- The conference Chrome is on port **9333**. Ryan's everyday Chrome is 9222 and
+- The conference Chrome is on port **9311**. Ryan's everyday Chrome is 9222 and
   is off-limits.
 
 ## Known-good baseline

@@ -51,7 +51,7 @@ inference gets traded for certainty.
 
 ## Ryan runs the browser
 
-- **The conference Chrome is on CDP at `127.0.0.1:9333`**, a dedicated profile at
+- **The conference Chrome is on CDP at `127.0.0.1:9311`**, a dedicated profile at
   `~/.nf-confs/chrome-profile`, signed into Google and Notion by hand. Managed by
   `scripts/chrome.js` (`npm run chrome:status` first — **check, never assume**).
 - **Ryan's everyday Chrome is on `127.0.0.1:9222`** and is his real signed-in

@@ -17,10 +17,11 @@ import {
   CDP_PORT,
   ensureWindow,
   fetchTargets,
-  fetchVersion,
+  foreignPortMessage,
   getChromeCommand,
   getProfileDir,
   openTab,
+  probePort,
   summarizeTargets,
   TARGET_WARN_THRESHOLD,
   waitForPort,
@@ -66,7 +67,13 @@ const printCommand = () => {
 
 /** Spawn Chrome detached so the CLI returns immediately. */
 const run = async () => {
-  const existing = await fetchVersion();
+  const probe = await probePort();
+  if (probe.state === "foreign") {
+    console.error(foreignPortMessage(probe.detail));
+    process.exitCode = 1;
+    return;
+  }
+  const existing = probe.state === "chrome" ? probe.version : null;
   if (existing) {
     console.log(
       `Chrome is already listening on ${CDP_ENDPOINT} ` +
@@ -117,7 +124,13 @@ const run = async () => {
  * skipping hosts that already have one.
  */
 const login = async () => {
-  let version = await fetchVersion();
+  const probe = await probePort();
+  if (probe.state === "foreign") {
+    console.error(foreignPortMessage(probe.detail));
+    process.exitCode = 1;
+    return;
+  }
+  let version = probe.state === "chrome" ? probe.version : null;
 
   if (!version) {
     const child = spawn("sh", ["-c", getChromeCommand()], {
@@ -187,11 +200,19 @@ const login = async () => {
  * explicitly: a host with no tab is called out, not silently omitted.
  */
 const status = async () => {
-  const version = await fetchVersion();
+  const probe = await probePort();
+  const version = probe.state === "chrome" ? probe.version : null;
   console.log("Conference Chrome status");
   console.log("========================\n");
   console.log(`Endpoint:    ${CDP_ENDPOINT}`);
   console.log(`Profile dir: ${getProfileDir()}\n`);
+
+  if (probe.state === "foreign") {
+    console.log("Listening:   NOT CHROME — another process holds the port.\n");
+    console.log(foreignPortMessage(probe.detail));
+    process.exitCode = 1;
+    return;
+  }
 
   if (!version) {
     console.log("Listening:   NO — nothing answered on the debug port.\n");
