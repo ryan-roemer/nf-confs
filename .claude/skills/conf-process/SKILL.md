@@ -113,8 +113,11 @@ Verdicts, and what each means:
 - **`create`** — make a new page. When `priorYears` is non-empty, the series
   exists in other years: **copy from the most recent prior year** for `Audience`,
   `Location` style and `Region`, then override with this year's facts. This is
-  why the matcher prints prior years. **Not `Tags`** — this workflow never sets
-  `Tags`, even when the prior year has them (see step 5).
+  why the matcher prints prior years. **Don't copy a prior-year value that
+  contradicts that page's own facts** (AGNTCon Europe 2026 was in Amsterdam
+  with `Region: Americas`) — flag it to Ryan as a fix instead. **`Tags`: only
+  `AI`**, per [workflow.md](../../../docs/workflow.md); a prior year tagged `AI`
+  is strong evidence, but no other prior-year tag is copied.
 - **`ambiguous`** — ⛔ ask Ryan. Never pick.
 - **`needs-review`** — ⛔ ask Ryan.
 
@@ -150,8 +153,17 @@ Set only these, and leave everything else alone:
 | `Organiser`                                                                                | `Tech / Speaker Programme`                           |
 | `Who`                                                                                      | **add** the speaker; look up by email — both domains |
 | `Audience`, `Region`, `Location`, `Affliation`, `CFP Details`, `CFP Opens`, `CFP Deadline` | per steps 3–4                                        |
+| `Tags`                                                                                     | **add `AI`** if the event is AI-focused — additive   |
 
-**Never touch** `Owner`, `Tags`, `Related / CFP`.
+**Never touch** `Owner`, `Related / CFP`, or any tag other than `AI`.
+
+**No speaker?** A suggested event Ryan adds by hand (no sheet row) uses the
+overrides in [workflow.md](../../../docs/workflow.md) → "Events with no
+speaker": `Engagement`/`Who` empty, `Status` = `Suggested (speaker
+programme)`, CFP on the event page, no sheet write. Steps 2–4 still apply;
+there is no queue, so call `classify()` from `scripts/notion/lib/match.js`
+directly with `{ name, website, date: { iso } }` — `notion:match` reads its
+records from the sheet.
 
 ⚠️ **A closed CFP clears on an `update` too.** If the existing page carries
 `CFP Details`, `CFP Opens` or `CFP Deadline` and the CFP is closed on a live

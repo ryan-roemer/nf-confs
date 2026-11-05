@@ -23,6 +23,35 @@ re-doing. Those are the entries that actually improve the skill.
 
 ## Entries
 
+### 2026-11-04 — AI-focused events get the `AI` tag (supersedes "never touch `Tags`")
+
+**Situation:** the two AGNTCon + MCPCon 2027 pages were created without `Tags`,
+per the old rule. Both 2026 editions carried `AI`.
+**Decision:** Ryan: "we should have tagged those `AI` events. That's important
+for the confs we're tracking." Both pages tagged `AI` after the fact.
+**Rule:** add `AI` to `Tags` when the event is AI-focused. Additive — keep
+existing tags; set no other tag. `Owner` and `Related / CFP` stay untouched.
+**Status:** graduated to `workflow.md` and `SKILL.md` steps 3 and 5.
+
+### 2026-11-04 — an event with no speaker submission (prospecting entry)
+
+**Situation:** Ryan added a two-edition conference series (NA, San Francisco
+2027-04-28/29; Europe, London 2027-09-15/16) straight to the Events Calendar,
+with no sheet row and no speaker. Every mapping in `workflow.md` assumes a talk.
+**Decision:** `Engagement` empty · `Status` = `Suggested (speaker programme)` ·
+`Organiser` = `Tech / Speaker Programme` · `Who` empty. Sponsorship deadlines
+are not recorded. No separate `Event Type: CFP Deadline` page: the CFP goes on
+the event page itself (`CFP Details`, `CFP Deadline`, `CFP Opens`); a TBA CFP
+stays blank.
+Also: the Europe 2026 prior-year page carried `Region: Americas` (Amsterdam) —
+Ryan had it fixed to `Europe`, and the wrong value was not copied forward. The
+Europe 2027 `/program/cfp/` URL served a stale 2020 KubeCon page; Ryan: leave
+`CFP Details` blank unless we have the real CFP URL.
+**Rule:** for a speaker-less "suggested" event, use the values above. No sheet
+write applies. Don't copy a prior-year value that contradicts its own
+`Location`; flag it for a fix. A CFP URL that serves another event is no URL.
+**Status:** open (1st instance).
+
 ### 2026-10-08 — a one-off GDG chapter afternoon event is a `Conference`
 
 **Situation:** Catania Mobile Day (row 121, Rosario Terranova). A single
